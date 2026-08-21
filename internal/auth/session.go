@@ -91,8 +91,10 @@ func createSessionAndSetCookie(w http.ResponseWriter, userID string) (*Session, 
 	mu.Unlock()
 
 	isSecure := false
+	sameSite := http.SameSiteLaxMode
 	if activeService != nil && activeService.env == "production" {
 		isSecure = true
+		sameSite = http.SameSiteNoneMode
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -101,7 +103,7 @@ func createSessionAndSetCookie(w http.ResponseWriter, userID string) (*Session, 
 		Path:     "/",
 		Expires:  session.ExpiresAt,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sameSite,
 		Secure:   isSecure,
 	})
 
@@ -160,8 +162,10 @@ func currentUser(r *http.Request) (*User, bool) {
 // clearSessionCookie removes the session cookie from the client browser.
 func clearSessionCookie(w http.ResponseWriter) {
 	isSecure := false
+	sameSite := http.SameSiteLaxMode
 	if activeService != nil && activeService.env == "production" {
 		isSecure = true
+		sameSite = http.SameSiteNoneMode
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -171,7 +175,7 @@ func clearSessionCookie(w http.ResponseWriter) {
 		Expires:  time.Unix(0, 0),
 		MaxAge:   -1,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sameSite,
 		Secure:   isSecure,
 	})
 }

@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: bloombe
+    env: go
+    buildCommand: go build -o app .
+    startCommand: ./app
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: APP_ENV
+        value: production
+      - key: FRONTEND_ORIGIN
+        value: https://capstone-project.name.ng
