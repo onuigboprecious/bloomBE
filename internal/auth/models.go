@@ -7,17 +7,20 @@ type User struct {
 	ID           string    `json:"id"`
 	Email        string    `json:"email"`
 	Name         string    `json:"name"`
+	Username     string    `json:"username"`
 	PasswordHash string    `json:"-"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	IsPro        bool      `json:"is_pro"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
-// UserPublic represents the safe public view of a user without sensitive data.
+// UserPublic represents the safe public view of a user matching the spec payload.
 type UserPublic struct {
 	ID        string    `json:"id"`
-	Email     string    `json:"email"`
 	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
+	Email     string    `json:"email"`
+	Username  string    `json:"username"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // Session represents an active authenticated user session.
@@ -33,8 +36,9 @@ type Session struct {
 func (u *User) ToPublic() UserPublic {
 	return UserPublic{
 		ID:        u.ID,
-		Email:     u.Email,
 		Name:      u.Name,
+		Email:     u.Email,
+		Username:  u.Username,
 		CreatedAt: u.CreatedAt,
 	}
 }

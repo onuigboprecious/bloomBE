@@ -8,45 +8,52 @@ import (
 
 	_ "github.com/lib/pq"
 
+	"github.com/onuigboprecious/infarbloom/backend/internal/analytics"
 	"github.com/onuigboprecious/infarbloom/backend/internal/auth"
+	"github.com/onuigboprecious/infarbloom/backend/internal/db"
 	"github.com/onuigboprecious/infarbloom/backend/internal/leads"
 	"github.com/onuigboprecious/infarbloom/backend/internal/middleware"
+	"github.com/onuigboprecious/infarbloom/backend/internal/profiles"
+	"github.com/onuigboprecious/infarbloom/backend/internal/store"
 )
 
 func main() {
-	env := os.Getenv("APP_ENV") // "production" or "development"
+	env := os.Getenv("APP_ENV")
 	if env == "" {
 		env = "development"
 	}
 
 	dbURL := os.Getenv("DATABASE_URL")
-	var db *sql.DB
+	var database *sql.DB
 	if dbURL != "" {
 		var err error
-		db, err = sql.Open("postgres", dbURL)
+		database, err = db.InitDB(dbURL)
 		if err != nil {
-			log.Printf("Warning: database connection setup error: %v", err)
-		} else if err := db.Ping(); err != nil {
-			log.Printf("Warning: PostgreSQL database ping failed: %v", err)
+			log.Printf("Warning: PostgreSQL initialization issue: %v", err)
 		} else {
-			log.Println("Successfully connected to PostgreSQL database!")
+			log.Println("PostgreSQL connected successfully!")
 		}
 	} else {
-		log.Println("Notice: DATABASE_URL is not set. Server running without live database.")
+		log.Println("Notice: DATABASE_URL is not set. Running with fallback in-memory store.")
 	}
-	if db != nil {
-		defer db.Close()
+	if database != nil {
+		defer database.Close()
 	}
 
-	authSvc := auth.New(db, env)
-	leadsSvc := leads.New(db)
+	authSvc := auth.New(database, env)
+	leadsSvc := leads.New(database)
+	profilesSvc := profiles.NewService(database)
+	profilesHandler := profiles.NewHandler(profilesSvc, authSvc)
+	analyticsSvc := analytics.New(database)
+	storeSvc := store.New(database)
 
 	mux := http.NewServeMux()
 
+	// Health Check & Root
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok","message":"Infarbloom Backend API Server is running"}`))
+		_, _ = w.Write([]byte(`{"status":"ok","message":"Bloom NFC Backend API Server is live"}`))
 	})
 
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -55,20 +62,40 @@ func main() {
 		_, _ = w.Write([]byte(`{"status":"ok","environment":"` + env + `"}`))
 	})
 
+	// 1. Authentication Endpoints
 	mux.HandleFunc("POST /api/signup", authSvc.HandleSignup)
 	mux.HandleFunc("POST /api/login", authSvc.HandleLogin)
 	mux.HandleFunc("POST /api/logout", authSvc.HandleLogout)
 	mux.HandleFunc("GET /api/me", authSvc.HandleMe)
 
-	// Route aliases for /api/auth/*
 	mux.HandleFunc("POST /api/auth/signup", authSvc.HandleSignup)
 	mux.HandleFunc("POST /api/auth/login", authSvc.HandleLogin)
 	mux.HandleFunc("POST /api/auth/logout", authSvc.HandleLogout)
 	mux.HandleFunc("GET /api/auth/me", authSvc.HandleMe)
 
-	// Lead Capture Endpoints
+	// 2. Profiles & Card Management
+	mux.HandleFunc("GET /api/profile/check-handle", profilesHandler.HandleCheckHandle)
+	mux.HandleFunc("PUT /api/profile/me", profilesHandler.HandleUpdateMyProfile)
+	mux.HandleFunc("POST /api/cards/claim", profilesHandler.HandleClaimCard)
+
+	mux.HandleFunc("GET /api/profile/", profilesHandler.HandleGetProfile)
+	mux.HandleFunc("GET /api/profile/{username}", profilesHandler.HandleGetProfile)
+
+	mux.HandleFunc("GET /api/vcard/", profilesHandler.HandleGetVCard)
+	mux.HandleFunc("GET /api/vcard/{username}", profilesHandler.HandleGetVCard)
+
+	// 3. Lead Capture Endpoints
 	mux.HandleFunc("POST /api/leads", leadsSvc.HandleCreateLead)
 	mux.HandleFunc("GET /api/leads", leadsSvc.HandleGetLeads)
+	mux.HandleFunc("DELETE /api/leads/{id}", leadsSvc.HandleDeleteLead)
+
+	// 4. Analytics & Tap Tracking
+	mux.HandleFunc("POST /api/taps/record", analyticsSvc.HandleRecordTap)
+	mux.HandleFunc("GET /api/analytics", analyticsSvc.HandleGetAnalytics)
+
+	// 5. VIP Waitlist & Orders
+	mux.HandleFunc("POST /api/waitlist", storeSvc.HandleWaitlist)
+	mux.HandleFunc("POST /api/orders", storeSvc.HandleOrders)
 
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
 	handler := middleware.CORS(frontendOrigin, mux)
@@ -77,6 +104,6 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	log.Printf("listening on :%s", port)
+	log.Printf("Bloom API listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, handler))
 }

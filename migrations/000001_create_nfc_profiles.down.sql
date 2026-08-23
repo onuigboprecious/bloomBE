@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS socials;
+DROP TABLE IF EXISTS profiles;

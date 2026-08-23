@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"net/http"
@@ -28,18 +29,11 @@ func init() {
 func seedDemoUsers() {
 	demoUsers := []*User{
 		{
-			ID:           "user-demo-1",
-			Email:        "test@example.com",
-			Name:         "Test User",
-			PasswordHash: "$2a$10$wN3d0Dq9yL0q/KzZ3U2/nO5g9z.Gv9Z6p.y3J.3X.7S7.6v5J5.", // demo bcrypt hash
-			CreatedAt:    time.Now(),
-			UpdatedAt:    time.Now(),
-		},
-		{
-			ID:           "user-demo-2",
+			ID:           "usr_9921",
 			Email:        "precious@bloomlabs.africa",
 			Name:         "Precious Onuigbo",
-			PasswordHash: "$2a$10$wN3d0Dq9yL0q/KzZ3U2/nO5g9z.Gv9Z6p.y3J.3X.7S7.6v5J5.",
+			Username:     "precious",
+			PasswordHash: "$2a$10$wN3d0Dq9yL0q/KzZ3U2/nO5g9z.Gv9Z6p.y3J.3X.7S7.6v5J5.", // demo bcrypt hash
 			CreatedAt:    time.Now(),
 			UpdatedAt:    time.Now(),
 		},
@@ -122,14 +116,14 @@ func currentUser(r *http.Request) (*User, bool) {
 	// If DB is available, query DB for active session
 	if activeService != nil && activeService.db != nil {
 		query := `
-		SELECT u.id, u.email, u.name, u.password_hash, u.created_at, u.updated_at
+		SELECT u.id, u.email, u.name, COALESCE(u.username, ''), u.password_hash, u.is_pro, u.created_at, u.updated_at
 		FROM sessions s
 		JOIN users u ON s.user_id = u.id
 		WHERE s.token = $1 AND s.expires_at > $2
 		`
 		var u User
 		err := activeService.db.QueryRow(query, token, time.Now()).Scan(
-			&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt,
+			&u.ID, &u.Email, &u.Name, &u.Username, &u.PasswordHash, &u.IsPro, &u.CreatedAt, &u.UpdatedAt,
 		)
 		if err == nil {
 			return &u, true
@@ -201,10 +195,10 @@ func destroySession(r *http.Request) {
 func findUserByEmail(email string) (*User, bool) {
 	// Query DB first if connected
 	if activeService != nil && activeService.db != nil {
-		query := `SELECT id, email, name, password_hash, created_at, updated_at FROM users WHERE email = $1`
+		query := `SELECT id, email, name, COALESCE(username, ''), password_hash, is_pro, created_at, updated_at FROM users WHERE email = $1`
 		var u User
 		err := activeService.db.QueryRow(query, email).Scan(
-			&u.ID, &u.Email, &u.Name, &u.PasswordHash, &u.CreatedAt, &u.UpdatedAt,
+			&u.ID, &u.Email, &u.Name, &u.Username, &u.PasswordHash, &u.IsPro, &u.CreatedAt, &u.UpdatedAt,
 		)
 		if err == nil {
 			return &u, true
@@ -225,10 +219,14 @@ func findUserByEmail(email string) (*User, bool) {
 func saveUser(u *User) error {
 	// Persist to DB if connected
 	if activeService != nil && activeService.db != nil {
-		query := `INSERT INTO users (id, email, name, password_hash, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`
-		_, err := activeService.db.Exec(query, u.ID, u.Email, u.Name, u.PasswordHash, u.CreatedAt, u.UpdatedAt)
+		query := `INSERT INTO users (id, email, name, username, password_hash, is_pro, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+		var usernameNull sql.NullString
+		if u.Username != "" {
+			usernameNull = sql.NullString{String: u.Username, Valid: true}
+		}
+		_, err := activeService.db.Exec(query, u.ID, u.Email, u.Name, usernameNull, u.PasswordHash, u.IsPro, u.CreatedAt, u.UpdatedAt)
 		if err != nil {
-			return errors.New("user with this email already exists")
+			return errors.New("user with this email or username already exists")
 		}
 	}
 

@@ -28,3 +28,12 @@ func userFromContext(ctx context.Context) (*User, bool) {
 	user, ok := ctx.Value(userContextKey).(*User)
 	return user, ok
 }
+
+// CurrentUserFromContext returns the authenticated User from context or session cookie.
+func CurrentUserFromContext(r *http.Request) (*User, bool) {
+	if u, ok := userFromContext(r.Context()); ok {
+		return u, true
+	}
+	return currentUser(r)
+}
+
