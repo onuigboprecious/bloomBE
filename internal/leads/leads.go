@@ -132,6 +132,10 @@ func (s *Service) HandleGetLeads(w http.ResponseWriter, r *http.Request) {
 					leadsList = append(leadsList, l)
 				}
 			}
+			if err := rows.Err(); err != nil {
+				writeError(w, http.StatusInternalServerError, "failed iterating leads: "+err.Error())
+				return
+			}
 			if leadsList == nil {
 				leadsList = []models.Lead{}
 			}
