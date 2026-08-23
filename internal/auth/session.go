@@ -16,10 +16,11 @@ const (
 )
 
 var (
-	mu       sync.RWMutex
-	users    = make(map[string]*User)    // userID -> User
-	byEmail  = make(map[string]string)   // email -> userID
-	sessions = make(map[string]*Session) // token -> Session
+	mu         sync.RWMutex
+	users      = make(map[string]*User)          // userID -> User
+	byEmail    = make(map[string]string)         // email -> userID
+	sessions   = make(map[string]*Session)       // token -> Session
+	resetStore = make(map[string]*PasswordReset) // token -> PasswordReset
 )
 
 func init() {

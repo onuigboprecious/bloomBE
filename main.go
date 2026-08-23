@@ -67,11 +67,15 @@ func main() {
 	mux.HandleFunc("POST /api/login", authSvc.HandleLogin)
 	mux.HandleFunc("POST /api/logout", authSvc.HandleLogout)
 	mux.HandleFunc("GET /api/me", authSvc.HandleMe)
+	mux.HandleFunc("POST /api/forgot-password", authSvc.HandleForgotPassword)
+	mux.HandleFunc("POST /api/reset-password", authSvc.HandleResetPassword)
 
 	mux.HandleFunc("POST /api/auth/signup", authSvc.HandleSignup)
 	mux.HandleFunc("POST /api/auth/login", authSvc.HandleLogin)
 	mux.HandleFunc("POST /api/auth/logout", authSvc.HandleLogout)
 	mux.HandleFunc("GET /api/auth/me", authSvc.HandleMe)
+	mux.HandleFunc("POST /api/auth/forgot-password", authSvc.HandleForgotPassword)
+	mux.HandleFunc("POST /api/auth/reset-password", authSvc.HandleResetPassword)
 
 	// 2. Profiles & Card Management
 	mux.HandleFunc("GET /api/profile/check-handle", profilesHandler.HandleCheckHandle)

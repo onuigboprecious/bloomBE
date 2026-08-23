@@ -76,18 +76,6 @@ func migrateSchema(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_profiles_card_uid ON profiles(card_uid);
 	CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON profiles(user_id);
 
-	ALTER TABLE profiles ADD COLUMN IF NOT EXISTS title VARCHAR(255) NOT NULL DEFAULT '';
-	ALTER TABLE profiles ADD COLUMN IF NOT EXISTS company VARCHAR(255) NOT NULL DEFAULT '';
-	ALTER TABLE profiles ADD COLUMN IF NOT EXISTS avatar TEXT NOT NULL DEFAULT '';
-	ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email VARCHAR(255) NOT NULL DEFAULT '';
-	ALTER TABLE profiles ADD COLUMN IF NOT EXISTS phone VARCHAR(50) NOT NULL DEFAULT '';
-	ALTER TABLE profiles ADD COLUMN IF NOT EXISTS website TEXT NOT NULL DEFAULT '';
-	ALTER TABLE profiles ADD COLUMN IF NOT EXISTS location VARCHAR(255) NOT NULL DEFAULT '';
-	ALTER TABLE profiles ADD COLUMN IF NOT EXISTS theme VARCHAR(50) NOT NULL DEFAULT 'dark-luxe';
-	ALTER TABLE profiles ADD COLUMN IF NOT EXISTS layout VARCHAR(50) NOT NULL DEFAULT 'stack';
-	ALTER TABLE profiles ADD COLUMN IF NOT EXISTS socials_json JSONB DEFAULT '{}'::jsonb;
-	ALTER TABLE profiles ADD COLUMN IF NOT EXISTS card_uid VARCHAR(255);
-
 	CREATE TABLE IF NOT EXISTS socials (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 		profile_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -148,6 +136,17 @@ func migrateSchema(db *sql.DB) error {
 		status VARCHAR(50) NOT NULL DEFAULT 'pending',
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
+
+	CREATE TABLE IF NOT EXISTS password_resets (
+		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+		email VARCHAR(255) NOT NULL,
+		token VARCHAR(128) UNIQUE NOT NULL,
+		expires_at TIMESTAMPTZ NOT NULL,
+		used BOOLEAN NOT NULL DEFAULT FALSE,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);
+	CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token);
+	CREATE INDEX IF NOT EXISTS idx_password_resets_email ON password_resets(email);
 	`
 
 	_, err := db.Exec(schema)
