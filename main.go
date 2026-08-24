@@ -12,6 +12,7 @@ import (
 
 	"github.com/onuigboprecious/infarbloom/backend/internal/analytics"
 	"github.com/onuigboprecious/infarbloom/backend/internal/auth"
+	"github.com/onuigboprecious/infarbloom/backend/internal/cards"
 	"github.com/onuigboprecious/infarbloom/backend/internal/db"
 	"github.com/onuigboprecious/infarbloom/backend/internal/leads"
 	"github.com/onuigboprecious/infarbloom/backend/internal/middleware"
@@ -79,6 +80,8 @@ func main() {
 	leadsSvc := leads.New(database)
 	profilesSvc := profiles.NewService(database)
 	profilesHandler := profiles.NewHandler(profilesSvc, authSvc)
+	cardsSvc := cards.NewService(database)
+	cardsHandler := cards.NewHandler(cardsSvc, authSvc)
 	analyticsSvc := analytics.New(database)
 	storeSvc := store.New(database)
 
@@ -115,7 +118,8 @@ func main() {
 	// 2. Profiles & Card Management
 	mux.HandleFunc("GET /api/profile/check-handle", profilesHandler.HandleCheckHandle)
 	mux.HandleFunc("PUT /api/profile/me", profilesHandler.HandleUpdateMyProfile)
-	mux.HandleFunc("POST /api/cards/claim", profilesHandler.HandleClaimCard)
+	mux.HandleFunc("POST /api/cards/claim", cardsHandler.HandleClaimCard)
+	mux.HandleFunc("POST /api/admin/cards/provision", cardsHandler.HandleBatchProvision)
 
 	mux.HandleFunc("GET /api/profile/", profilesHandler.HandleGetProfile)
 	mux.HandleFunc("GET /api/profile/{username}", profilesHandler.HandleGetProfile)

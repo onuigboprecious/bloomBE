@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/onuigboprecious/infarbloom/backend/internal/auth"
+	"github.com/onuigboprecious/infarbloom/backend/internal/cards"
 	"github.com/onuigboprecious/infarbloom/backend/internal/models"
 )
 
@@ -33,7 +34,7 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
 
-// HandleGetProfile handles GET /api/profile/@:username or GET /api/profile/:username
+// HandleGetProfile handles GET /api/profile/@:username, GET /api/profile/:username, or GET /api/profile/card/:cardUid?sig=...
 func (h *Handler) HandleGetProfile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -54,10 +55,33 @@ func (h *Handler) HandleGetProfile(w http.ResponseWriter, r *http.Request) {
 		username = "precious"
 	}
 
+	// Verify HMAC signature if sig parameter is present
+	sig := r.URL.Query().Get("sig")
+	if sig != "" {
+		if !cards.VerifyCardSignature(username, sig) {
+			writeJSON(w, http.StatusUnauthorized, map[string]interface{}{
+				"error":   "invalid_signature",
+				"message": "Hardware card signature verification failed",
+			})
+			return
+		}
+	}
+
 	profile, err := h.svc.GetByUsername(r.Context(), username)
 	if err != nil {
-		if errors.Is(err, ErrProfileNotFound) {
-			writeError(w, http.StatusNotFound, "profile not found")
+		if errors.Is(err, ErrUnregisteredCard) || errors.Is(err, ErrProfileNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{
+				"error":   "unregistered_card",
+				"message": "This card has not been registered or provisioned in our system",
+			})
+			return
+		}
+		if errors.Is(err, ErrCardUnclaimed) {
+			writeJSON(w, http.StatusConflict, map[string]interface{}{
+				"error":   "unclaimed_card",
+				"cardUid": username,
+				"message": "This card has been provisioned but not claimed yet",
+			})
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err.Error())

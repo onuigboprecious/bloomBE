@@ -13,9 +13,11 @@ import (
 )
 
 var (
-	ErrProfileNotFound   = errors.New("profile not found")
-	ErrUsernameTaken     = errors.New("username is already taken")
-	ErrCardAlreadyClaimed = errors.New("card is already claimed")
+	ErrProfileNotFound    = errors.New("profile not found")
+	ErrUsernameTaken      = errors.New("username is already taken")
+	ErrCardAlreadyClaimed  = errors.New("card is already claimed")
+	ErrCardUnclaimed      = errors.New("unclaimed_card")
+	ErrUnregisteredCard   = errors.New("unregistered_card")
 )
 
 type Service struct {
@@ -87,6 +89,21 @@ func (s *Service) GetByUsername(ctx context.Context, identifier string) (*models
 	identifier = strings.TrimSpace(strings.ToLower(identifier))
 
 	if s.db != nil {
+		// Check nfc_cards table if identifier matches card UID format (e.g., BLM-*)
+		if strings.HasPrefix(strings.ToUpper(identifier), "BLM-") {
+			var cardStatus string
+			err := s.db.QueryRowContext(ctx, `SELECT status FROM nfc_cards WHERE LOWER(card_uid) = $1`, identifier).Scan(&cardStatus)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return nil, ErrUnregisteredCard
+				}
+				return nil, err
+			}
+			if cardStatus == "provisioned" {
+				return nil, ErrCardUnclaimed
+			}
+		}
+
 		query := `
 		SELECT u.name, COALESCE(u.username, ''), COALESCE(p.title, ''), COALESCE(p.company, ''),
 		       COALESCE(p.bio, ''), COALESCE(p.avatar, ''), u.email, COALESCE(p.phone, ''),
