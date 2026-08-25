@@ -19,6 +19,7 @@ import (
 var (
 	ErrCardNotFound       = errors.New("unregistered_card")
 	ErrCardAlreadyClaimed = errors.New("card_already_claimed")
+	ErrCardUidExists      = errors.New("card_uid_already_exists")
 )
 
 type NFCCard struct {
@@ -39,9 +40,21 @@ type ProvisionBatchRequest struct {
 }
 
 type ProvisionBatchResponse struct {
-	Status      string    `json:"status"`
-	Count       int       `json:"count"`
-	Cards       []NFCCard `json:"cards"`
+	Status string    `json:"status"`
+	Count  int       `json:"count"`
+	Cards  []NFCCard `json:"cards"`
+}
+
+type CreateCardPayload struct {
+	CardUid    string `json:"cardUid"`
+	FinishName string `json:"finishName"`
+	Status     string `json:"status"`
+}
+
+type UpdateCardPayload struct {
+	CardUid    *string `json:"cardUid,omitempty"`
+	FinishName *string `json:"finishName,omitempty"`
+	Status     *string `json:"status,omitempty"`
 }
 
 type Service struct {
@@ -75,6 +88,72 @@ func (s *Service) seedDefaultCards() {
 		Signature:  sig,
 		CreatedAt:  time.Now(),
 	}
+}
+
+// CreateCard pushes a single unique tag to DB
+func (s *Service) CreateCard(ctx context.Context, cardUid, finishName, status string) (*NFCCard, error) {
+	cardUid = strings.TrimSpace(cardUid)
+	if cardUid == "" {
+		return nil, errors.New("cardUid cannot be empty")
+	}
+
+	if finishName == "" {
+		finishName = "Stealth Matte Black"
+	}
+	if status == "" {
+		status = "provisioned"
+	}
+
+	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
+	if frontendOrigin == "" {
+		frontendOrigin = "https://capstone-project.name.ng"
+	}
+	sig := SignCardUID(cardUid)
+	signedURL := fmt.Sprintf("%s/card/%s?sig=%s", frontendOrigin, cardUid, sig)
+
+	if s.db != nil {
+		query := `
+		INSERT INTO nfc_cards (card_uid, finish_name, status, taps_count, created_at)
+		VALUES ($1, $2, $3, 0, NOW())
+		RETURNING id, card_uid, user_id, finish_name, status, taps_count, created_at
+		`
+		var c NFCCard
+		var userIDNull sql.NullString
+		err := s.db.QueryRowContext(ctx, query, cardUid, finishName, status).Scan(
+			&c.ID, &c.CardUid, &userIDNull, &c.FinishName, &c.Status, &c.TapsCount, &c.CreatedAt,
+		)
+		if err != nil {
+			if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "duplicate key") {
+				return nil, ErrCardUidExists
+			}
+			return nil, err
+		}
+		if userIDNull.Valid {
+			c.UserID = &userIDNull.String
+		}
+		c.Signature = sig
+		c.SignedURL = signedURL
+		return &c, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.cards[cardUid]; exists {
+		return nil, ErrCardUidExists
+	}
+
+	c := &NFCCard{
+		ID:         fmt.Sprintf("card-%d", time.Now().UnixNano()),
+		CardUid:    cardUid,
+		FinishName: finishName,
+		Status:     status,
+		Signature:  sig,
+		SignedURL:  signedURL,
+		CreatedAt:  time.Now(),
+	}
+	s.cards[cardUid] = c
+	return c, nil
 }
 
 // ProvisionBatch pre-seeds a batch of card UIDs in database as 'provisioned' and returns signed URLs.
@@ -166,6 +245,148 @@ func (s *Service) ProvisionBatch(ctx context.Context, cardUids []string, finishN
 	}
 
 	return result, nil
+}
+
+// ListAllCards returns list of all tags in database
+func (s *Service) ListAllCards(ctx context.Context) ([]NFCCard, error) {
+	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
+	if frontendOrigin == "" {
+		frontendOrigin = "https://capstone-project.name.ng"
+	}
+
+	if s.db != nil {
+		rows, err := s.db.QueryContext(ctx, `SELECT id, card_uid, user_id, finish_name, status, taps_count, created_at FROM nfc_cards ORDER BY created_at DESC`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		var list []NFCCard
+		for rows.Next() {
+			var c NFCCard
+			var uNull sql.NullString
+			if err := rows.Scan(&c.ID, &c.CardUid, &uNull, &c.FinishName, &c.Status, &c.TapsCount, &c.CreatedAt); err == nil {
+				if uNull.Valid {
+					c.UserID = &uNull.String
+				}
+				c.Signature = SignCardUID(c.CardUid)
+				c.SignedURL = fmt.Sprintf("%s/card/%s?sig=%s", frontendOrigin, c.CardUid, c.Signature)
+				list = append(list, c)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		if list == nil {
+			list = []NFCCard{}
+		}
+		return list, nil
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var list []NFCCard
+	for _, c := range s.cards {
+		res := *c
+		res.Signature = SignCardUID(c.CardUid)
+		res.SignedURL = fmt.Sprintf("%s/card/%s?sig=%s", frontendOrigin, c.CardUid, res.Signature)
+		list = append(list, res)
+	}
+	return list, nil
+}
+
+// UpdateCard updates an existing NFC tag record
+func (s *Service) UpdateCard(ctx context.Context, targetUid string, payload UpdateCardPayload) (*NFCCard, error) {
+	targetUid = strings.TrimSpace(targetUid)
+
+	if s.db != nil {
+		var newUid, finishName, status string
+		var userIDNull sql.NullString
+
+		_ = s.db.QueryRowContext(ctx, `SELECT card_uid, finish_name, status, user_id FROM nfc_cards WHERE card_uid = $1`, targetUid).Scan(&newUid, &finishName, &status, &userIDNull)
+
+		if payload.CardUid != nil && *payload.CardUid != "" {
+			newUid = strings.TrimSpace(*payload.CardUid)
+		}
+		if payload.FinishName != nil && *payload.FinishName != "" {
+			finishName = *payload.FinishName
+		}
+		if payload.Status != nil && *payload.Status != "" {
+			status = *payload.Status
+		}
+
+		query := `
+		UPDATE nfc_cards
+		SET card_uid = $1, finish_name = $2, status = $3
+		WHERE card_uid = $4
+		RETURNING id, card_uid, user_id, finish_name, status, taps_count, created_at
+		`
+		var c NFCCard
+		err := s.db.QueryRowContext(ctx, query, newUid, finishName, status, targetUid).Scan(
+			&c.ID, &c.CardUid, &userIDNull, &c.FinishName, &c.Status, &c.TapsCount, &c.CreatedAt,
+		)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, ErrCardNotFound
+			}
+			return nil, err
+		}
+		if userIDNull.Valid {
+			c.UserID = &userIDNull.String
+		}
+		c.Signature = SignCardUID(c.CardUid)
+		return &c, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	c, exists := s.cards[targetUid]
+	if !exists {
+		return nil, ErrCardNotFound
+	}
+
+	if payload.CardUid != nil && *payload.CardUid != "" {
+		delete(s.cards, targetUid)
+		c.CardUid = *payload.CardUid
+		s.cards[c.CardUid] = c
+	}
+	if payload.FinishName != nil {
+		c.FinishName = *payload.FinishName
+	}
+	if payload.Status != nil {
+		c.Status = *payload.Status
+	}
+
+	res := *c
+	return &res, nil
+}
+
+// DeleteCard deletes an NFC tag record from DB
+func (s *Service) DeleteCard(ctx context.Context, cardUid string) error {
+	cardUid = strings.TrimSpace(cardUid)
+
+	if s.db != nil {
+		res, err := s.db.ExecContext(ctx, `DELETE FROM nfc_cards WHERE card_uid = $1`, cardUid)
+		if err != nil {
+			return err
+		}
+		affected, _ := res.RowsAffected()
+		if affected == 0 {
+			return ErrCardNotFound
+		}
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.cards[cardUid]; !exists {
+		return ErrCardNotFound
+	}
+	delete(s.cards, cardUid)
+	return nil
 }
 
 // ClaimCard claims a provisioned card for authenticated user
@@ -285,6 +506,113 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+// HandleCreateCard handles POST /api/admin/cards (Single Tag Push)
+func (h *Handler) HandleCreateCard(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req CreateCardPayload
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	card, err := h.svc.CreateCard(r.Context(), req.CardUid, req.FinishName, req.Status)
+	if err != nil {
+		if errors.Is(err, ErrCardUidExists) {
+			writeError(w, http.StatusConflict, "cardUid already exists in database and must be unique")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, card)
+}
+
+// HandleListCards handles GET /api/admin/cards (List All Tags)
+func (h *Handler) HandleListCards(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	cardsList, err := h.svc.ListAllCards(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, cardsList)
+}
+
+// HandleUpdateCard handles PUT /api/admin/cards/{cardUid} (Update Tag)
+func (h *Handler) HandleUpdateCard(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut && r.Method != http.MethodPatch {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	cardUid := r.PathValue("cardUid")
+	if cardUid == "" {
+		path := strings.TrimPrefix(r.URL.Path, "/api/admin/cards/")
+		cardUid = strings.TrimPrefix(path, ":")
+	}
+	if cardUid == "" {
+		writeError(w, http.StatusBadRequest, "cardUid parameter is required")
+		return
+	}
+
+	var req UpdateCardPayload
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid payload")
+		return
+	}
+
+	card, err := h.svc.UpdateCard(r.Context(), cardUid, req)
+	if err != nil {
+		if errors.Is(err, ErrCardNotFound) {
+			writeError(w, http.StatusNotFound, "cardUid not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, card)
+}
+
+// HandleDeleteCard handles DELETE /api/admin/cards/{cardUid} (Delete Tag)
+func (h *Handler) HandleDeleteCard(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	cardUid := r.PathValue("cardUid")
+	if cardUid == "" {
+		path := strings.TrimPrefix(r.URL.Path, "/api/admin/cards/")
+		cardUid = strings.TrimPrefix(path, ":")
+	}
+	if cardUid == "" {
+		writeError(w, http.StatusBadRequest, "cardUid parameter is required")
+		return
+	}
+
+	if err := h.svc.DeleteCard(r.Context(), cardUid); err != nil {
+		if errors.Is(err, ErrCardNotFound) {
+			writeError(w, http.StatusNotFound, "cardUid not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "card tag deleted successfully"})
 }
 
 // HandleBatchProvision handles POST /api/admin/cards/provision

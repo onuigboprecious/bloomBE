@@ -119,6 +119,12 @@ func main() {
 	mux.HandleFunc("GET /api/profile/check-handle", profilesHandler.HandleCheckHandle)
 	mux.HandleFunc("PUT /api/profile/me", profilesHandler.HandleUpdateMyProfile)
 	mux.HandleFunc("POST /api/cards/claim", cardsHandler.HandleClaimCard)
+
+	// Admin Tag CRUD Endpoints
+	mux.HandleFunc("POST /api/admin/cards", cardsHandler.HandleCreateCard)
+	mux.HandleFunc("GET /api/admin/cards", cardsHandler.HandleListCards)
+	mux.HandleFunc("PUT /api/admin/cards/{cardUid}", cardsHandler.HandleUpdateCard)
+	mux.HandleFunc("DELETE /api/admin/cards/{cardUid}", cardsHandler.HandleDeleteCard)
 	mux.HandleFunc("POST /api/admin/cards/provision", cardsHandler.HandleBatchProvision)
 
 	mux.HandleFunc("GET /api/profile/", profilesHandler.HandleGetProfile)
