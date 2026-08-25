@@ -1,10 +1,14 @@
 package auth
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -85,5 +89,64 @@ func handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Asynchronously dispatch Welcome Email via Resend
+	go sendResendWelcomeEmail(newUser.Email, newUser.Name, newUser.Username)
+
 	_ = writeJSON(w, http.StatusCreated, newUser.ToPublic())
+}
+
+// sendResendWelcomeEmail sends a welcome email to newly registered users via Resend.
+func sendResendWelcomeEmail(toEmail, userName, username string) {
+	apiKey := os.Getenv("RESEND_API_KEY")
+	if apiKey == "" {
+		log.Println("auth: notice - RESEND_API_KEY env var not set. Skipping welcome email.")
+		return
+	}
+
+	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
+	if frontendOrigin == "" {
+		frontendOrigin = "https://capstone-project.name.ng"
+	}
+	profileURL := fmt.Sprintf("%s/@%s", frontendOrigin, username)
+
+	payload := map[string]interface{}{
+		"from":    "Bloom <onboarding@resend.dev>",
+		"to":      []string{toEmail},
+		"subject": "Welcome to Bloom! 🎉 Your Digital Card is Ready",
+		"html": fmt.Sprintf(`
+			<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+				<h2 style="color: #00BCFF;">Welcome to Bloom, %s! 🎉</h2>
+				<p>Your account and digital business card profile have been created successfully.</p>
+				<p style="margin: 25px 0;">
+					<a href="%s" style="background-color: #00BCFF; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View My Digital Card</a>
+				</p>
+				<p style="color: #666; font-size: 13px;">Your profile link:<br/><a href="%s">%s</a></p>
+				<p style="color: #888; font-size: 12px; margin-top: 30px;">Thank you for joining Bloom! If you need any help, reply directly to this email.</p>
+			</div>
+		`, userName, profileURL, profileURL, profileURL),
+	}
+
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("auth: failed to marshal welcome email: %v", err)
+		return
+	}
+
+	req, err := http.NewRequest("POST", "https://api.resend.com/emails", bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		log.Printf("auth: failed to create welcome email request: %v", err)
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("auth: failed to send welcome email: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	log.Printf("auth: Resend welcome email sent to %s (Status: %d)", toEmail, resp.StatusCode)
 }
