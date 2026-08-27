@@ -26,6 +26,7 @@ type NFCCard struct {
 	ID         string    `json:"id"`
 	CardUid    string    `json:"cardUid"`
 	UserID     *string   `json:"userId,omitempty"`
+	LinkedUser string    `json:"linkedUser,omitempty"`
 	FinishName string    `json:"finishName"`
 	Status     string    `json:"status"`
 	TapsCount  int       `json:"tapsCount"`
@@ -255,7 +256,13 @@ func (s *Service) ListAllCards(ctx context.Context) ([]NFCCard, error) {
 	}
 
 	if s.db != nil {
-		rows, err := s.db.QueryContext(ctx, `SELECT id, card_uid, user_id, finish_name, status, taps_count, created_at FROM nfc_cards ORDER BY created_at DESC`)
+		query := `
+		SELECT c.id, c.card_uid, c.user_id, c.finish_name, c.status, c.taps_count, c.created_at, COALESCE(u.username, u.name, '')
+		FROM nfc_cards c
+		LEFT JOIN users u ON c.user_id = u.id
+		ORDER BY c.created_at DESC
+		`
+		rows, err := s.db.QueryContext(ctx, query)
 		if err != nil {
 			return nil, err
 		}
@@ -265,9 +272,13 @@ func (s *Service) ListAllCards(ctx context.Context) ([]NFCCard, error) {
 		for rows.Next() {
 			var c NFCCard
 			var uNull sql.NullString
-			if err := rows.Scan(&c.ID, &c.CardUid, &uNull, &c.FinishName, &c.Status, &c.TapsCount, &c.CreatedAt); err == nil {
+			var usernameNull sql.NullString
+			if err := rows.Scan(&c.ID, &c.CardUid, &uNull, &c.FinishName, &c.Status, &c.TapsCount, &c.CreatedAt, &usernameNull); err == nil {
 				if uNull.Valid {
 					c.UserID = &uNull.String
+				}
+				if usernameNull.Valid && usernameNull.String != "" {
+					c.LinkedUser = usernameNull.String
 				}
 				c.Signature = SignCardUID(c.CardUid)
 				c.SignedURL = fmt.Sprintf("%s/card/%s?sig=%s", frontendOrigin, c.CardUid, c.Signature)
@@ -282,6 +293,7 @@ func (s *Service) ListAllCards(ctx context.Context) ([]NFCCard, error) {
 		}
 		return list, nil
 	}
+
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
