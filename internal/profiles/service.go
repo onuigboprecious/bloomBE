@@ -92,14 +92,15 @@ func (s *Service) GetByUsername(ctx context.Context, identifier string) (*models
 		// Check nfc_cards table if identifier matches card UID format (e.g., BLM-*)
 		if strings.HasPrefix(strings.ToUpper(identifier), "BLM-") {
 			var cardStatus string
-			err := s.db.QueryRowContext(ctx, `SELECT status FROM nfc_cards WHERE LOWER(card_uid) = $1`, identifier).Scan(&cardStatus)
+			var cardUserID sql.NullString
+			err := s.db.QueryRowContext(ctx, `SELECT status, user_id FROM nfc_cards WHERE LOWER(card_uid) = $1`, identifier).Scan(&cardStatus, &cardUserID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return nil, ErrUnregisteredCard
 				}
 				return nil, err
 			}
-			if cardStatus == "provisioned" {
+			if cardStatus == "provisioned" || !cardUserID.Valid || strings.TrimSpace(cardUserID.String) == "" {
 				return nil, ErrCardUnclaimed
 			}
 		}
@@ -111,7 +112,11 @@ func (s *Service) GetByUsername(ctx context.Context, identifier string) (*models
 		       COALESCE(p.layout, 'stack'), COALESCE(p.card_uid, ''), COALESCE(p.socials_json, '{}'::jsonb), u.id
 		FROM users u
 		LEFT JOIN profiles p ON p.user_id = u.id
-		WHERE LOWER(u.username) = $1 OR LOWER(p.card_uid) = $1
+		WHERE LOWER(u.username) = $1 
+		   OR LOWER(p.card_uid) = $1 
+		   OR u.id IN (SELECT user_id FROM nfc_cards WHERE LOWER(card_uid) = $1 AND user_id IS NOT NULL)
+		ORDER BY p.updated_at DESC
+		LIMIT 1
 		`
 		var p models.BloomProfile
 		var userID string
@@ -143,6 +148,7 @@ func (s *Service) GetByUsername(ctx context.Context, identifier string) (*models
 
 	return s.getFallbackProfile(identifier)
 }
+
 
 func (s *Service) getFallbackProfile(identifier string) (*models.BloomProfile, error) {
 	s.mu.RLock()
