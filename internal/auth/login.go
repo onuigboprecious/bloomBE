@@ -51,10 +51,21 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := createSessionAndSetCookie(w, user.ID); err != nil {
+	session, err := createSessionAndSetCookie(w, user.ID)
+	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
 
-	_ = writeJSON(w, http.StatusOK, user.ToPublic())
+	pub := user.ToPublic()
+	_ = writeJSON(w, http.StatusOK, map[string]interface{}{
+		"token":     session.Token,
+		"id":        pub.ID,
+		"name":      pub.Name,
+		"email":     pub.Email,
+		"username":  pub.Username,
+		"createdAt": pub.CreatedAt,
+		"user":      pub,
+	})
 }
+

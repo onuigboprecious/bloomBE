@@ -84,7 +84,8 @@ func handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := createSessionAndSetCookie(w, newUser.ID); err != nil {
+	session, err := createSessionAndSetCookie(w, newUser.ID)
+	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to create session")
 		return
 	}
@@ -92,8 +93,18 @@ func handleSignup(w http.ResponseWriter, r *http.Request) {
 	// Asynchronously dispatch Welcome Email via Resend
 	go sendResendWelcomeEmail(newUser.Email, newUser.Name, newUser.Username)
 
-	_ = writeJSON(w, http.StatusCreated, newUser.ToPublic())
+	pub := newUser.ToPublic()
+	_ = writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"token":     session.Token,
+		"id":        pub.ID,
+		"name":      pub.Name,
+		"email":     pub.Email,
+		"username":  pub.Username,
+		"createdAt": pub.CreatedAt,
+		"user":      pub,
+	})
 }
+
 
 // sendResendWelcomeEmail sends a welcome email to newly registered users via Resend.
 func sendResendWelcomeEmail(toEmail, userName, username string) {

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -85,12 +86,8 @@ func createSessionAndSetCookie(w http.ResponseWriter, userID string) (*Session, 
 	sessions[token] = session
 	mu.Unlock()
 
-	isSecure := false
-	sameSite := http.SameSiteLaxMode
-	if activeService != nil && activeService.env == "production" {
-		isSecure = true
-		sameSite = http.SameSiteNoneMode
-	}
+	isSecure := true
+	sameSite := http.SameSiteNoneMode
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
@@ -105,14 +102,30 @@ func createSessionAndSetCookie(w http.ResponseWriter, userID string) (*Session, 
 	return session, nil
 }
 
-// currentUser returns the User associated with the active request session cookie, if valid.
+// currentUser returns the User associated with the active request session cookie or Authorization Bearer header.
 func currentUser(r *http.Request) (*User, bool) {
-	cookie, err := r.Cookie(sessionCookieName)
-	if err != nil || cookie.Value == "" {
-		return nil, false
+	var token string
+	if cookie, err := r.Cookie(sessionCookieName); err == nil && cookie.Value != "" {
+		token = cookie.Value
 	}
 
-	token := cookie.Value
+	if token == "" {
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token = strings.TrimPrefix(authHeader, "Bearer ")
+		} else if strings.HasPrefix(authHeader, "bearer ") {
+			token = strings.TrimPrefix(authHeader, "bearer ")
+		}
+	}
+
+	if token == "" {
+		token = r.Header.Get("X-Session-Token")
+	}
+
+	if token == "" {
+		return nil, false
+	}
+	token = strings.TrimSpace(token)
 
 	// If DB is available, query DB for active session
 	if activeService != nil && activeService.db != nil {
@@ -153,6 +166,7 @@ func currentUser(r *http.Request) (*User, bool) {
 
 	return user, true
 }
+
 
 // clearSessionCookie removes the session cookie from the client browser.
 func clearSessionCookie(w http.ResponseWriter) {
