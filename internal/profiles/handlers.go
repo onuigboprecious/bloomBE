@@ -191,7 +191,8 @@ func (h *Handler) HandleGetVCard(w http.ResponseWriter, r *http.Request) {
 	filename := fmt.Sprintf("%s.vcf", profile.Username)
 
 	w.Header().Set("Content-Type", "text/vcard; charset=utf-8")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", filename))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(vcardStr))
 }
+
