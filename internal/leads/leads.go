@@ -90,7 +90,15 @@ func (s *Service) HandleCreateLead(w http.ResponseWriter, r *http.Request) {
 
 	if s.db != nil {
 		var userID sql.NullString
-		_ = s.db.QueryRowContext(r.Context(), `SELECT user_id FROM nfc_cards WHERE card_uid = $1`, req.CardUid).Scan(&userID)
+		if req.CardUid != "" {
+			_ = s.db.QueryRowContext(r.Context(), `SELECT user_id FROM nfc_cards WHERE card_uid = $1 AND user_id IS NOT NULL`, req.CardUid).Scan(&userID)
+		}
+		if !userID.Valid || userID.String == "" {
+			_ = s.db.QueryRowContext(r.Context(), `SELECT user_id FROM profiles WHERE card_uid = $1 AND user_id IS NOT NULL`, req.CardUid).Scan(&userID)
+		}
+		if !userID.Valid || userID.String == "" {
+			_ = s.db.QueryRowContext(r.Context(), `SELECT id FROM users ORDER BY created_at ASC LIMIT 1`).Scan(&userID)
+		}
 
 		_, err := s.db.ExecContext(
 			r.Context(),
@@ -116,13 +124,17 @@ func (s *Service) HandleGetLeads(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, ok := auth.CurrentUserFromContext(r)
-	if !ok || user == nil {
-		// Provide mock leads fallback if not strictly authenticated
-	}
+	user, _ := auth.CurrentUserFromContext(r)
+	if s.db != nil {
 
-	if s.db != nil && user != nil {
-		rows, err := s.db.QueryContext(r.Context(), `SELECT id, card_uid, name, email, phone, role, method, notes, created_at FROM leads WHERE user_id = $1 OR card_uid = 'BLM-9921-NFC' ORDER BY created_at DESC`, user.ID)
+		var rows *sql.Rows
+		var err error
+		if user != nil {
+			rows, err = s.db.QueryContext(r.Context(), `SELECT id, card_uid, name, email, phone, role, method, notes, created_at FROM leads WHERE user_id = $1 OR user_id IS NULL ORDER BY created_at DESC`, user.ID)
+		} else {
+			rows, err = s.db.QueryContext(r.Context(), `SELECT id, card_uid, name, email, phone, role, method, notes, created_at FROM leads ORDER BY created_at DESC`)
+		}
+
 		if err == nil {
 			defer rows.Close()
 			var leadsList []models.Lead
@@ -143,6 +155,7 @@ func (s *Service) HandleGetLeads(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
 
 	s.mu.RLock()
 	leadsList := make([]models.Lead, len(s.memory))
