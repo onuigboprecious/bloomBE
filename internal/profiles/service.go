@@ -229,16 +229,32 @@ func (s *Service) getStatsForUser(ctx context.Context, userID, cardUid string) m
 // UpdateMyProfile updates authenticated user's profile info
 func (s *Service) UpdateMyProfile(ctx context.Context, userID string, req models.UpdateBloomProfileRequest) (*models.BloomProfile, error) {
 	if s.db != nil {
-		// Update user name/email if provided
+		// Update user name if provided
 		if req.Name != nil && *req.Name != "" {
 			_, _ = s.db.ExecContext(ctx, `UPDATE users SET name = $1 WHERE id = $2`, *req.Name, userID)
 		}
 
-		socialsJSON, _ := json.Marshal(req.Socials)
+		// Update username handle if provided
+		if req.Username != nil && *req.Username != "" {
+			cleanUsername := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(*req.Username, "@")))
+			if cleanUsername != "" {
+				_, _ = s.db.ExecContext(ctx, `UPDATE users SET username = $1 WHERE id = $2`, cleanUsername, userID)
+			}
+		}
+
+		var socialsArg interface{}
+		if req.Socials != nil {
+			b, err := json.Marshal(req.Socials)
+			if err == nil {
+				socialsArg = string(b)
+			}
+		} else {
+			socialsArg = nil
+		}
 
 		query := `
 		INSERT INTO profiles (user_id, title, company, bio, avatar, phone, website, location, theme, layout, socials_json, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11::jsonb, '{}'::jsonb), NOW())
 		ON CONFLICT (user_id) DO UPDATE SET
 			title = COALESCE(NULLIF($2, ''), profiles.title),
 			company = COALESCE(NULLIF($3, ''), profiles.company),
@@ -249,7 +265,7 @@ func (s *Service) UpdateMyProfile(ctx context.Context, userID string, req models
 			location = COALESCE(NULLIF($8, ''), profiles.location),
 			theme = COALESCE(NULLIF($9, ''), profiles.theme),
 			layout = COALESCE(NULLIF($10, ''), profiles.layout),
-			socials_json = COALESCE($11, profiles.socials_json),
+			socials_json = CASE WHEN $11::text IS NULL THEN profiles.socials_json ELSE $11::jsonb END,
 			updated_at = NOW()
 		`
 		var title, company, bio, avatar, phone, website, location, theme, layout string
@@ -263,13 +279,34 @@ func (s *Service) UpdateMyProfile(ctx context.Context, userID string, req models
 		if req.Theme != nil { theme = *req.Theme }
 		if req.Layout != nil { layout = *req.Layout }
 
-		_, err := s.db.ExecContext(ctx, query, userID, title, company, bio, avatar, phone, website, location, theme, layout, socialsJSON)
+		_, err := s.db.ExecContext(ctx, query, userID, title, company, bio, avatar, phone, website, location, theme, layout, socialsArg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update profile: %w", err)
 		}
 
+		// Sync social_handles table if req.Socials was provided
+		if req.Socials != nil {
+			_, _ = s.db.ExecContext(ctx, `DELETE FROM social_handles WHERE user_id = $1`, userID)
+			for platform, handleVal := range req.Socials {
+				pName := strings.ToLower(strings.TrimSpace(platform))
+				var hStr string
+				if sVal, ok := handleVal.(string); ok {
+					hStr = sVal
+				} else if handleVal != nil {
+					hStr = fmt.Sprintf("%v", handleVal)
+				}
+				hStr = strings.TrimSpace(hStr)
+				if pName != "" && hStr != "" {
+					_, _ = s.db.ExecContext(ctx, `INSERT INTO social_handles (user_id, platform, handle, created_at) VALUES ($1, $2, $3, NOW())`, userID, pName, hStr)
+				}
+			}
+		}
+
 		var username string
 		_ = s.db.QueryRowContext(ctx, `SELECT username FROM users WHERE id = $1`, userID).Scan(&username)
+		if username == "" {
+			_ = s.db.QueryRowContext(ctx, `SELECT email FROM users WHERE id = $1`, userID).Scan(&username)
+		}
 		return s.GetByUsername(ctx, username)
 	}
 
