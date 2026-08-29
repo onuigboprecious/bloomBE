@@ -58,6 +58,9 @@ func (s *Service) GetUserLinks(ctx context.Context, userID string) ([]models.Cus
 				list = append(list, item)
 			}
 		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 		if list == nil {
 			list = []models.CustomLink{}
 		}

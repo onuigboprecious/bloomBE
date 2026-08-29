@@ -59,6 +59,9 @@ func (s *Service) GetUserSocials(ctx context.Context, userID string) ([]models.S
 				list = append(list, item)
 			}
 		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
 		if list == nil {
 			list = []models.SocialHandle{}
 		}

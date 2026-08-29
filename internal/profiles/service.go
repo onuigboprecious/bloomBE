@@ -151,6 +151,9 @@ func (s *Service) GetByUsername(ctx context.Context, identifier string) (*models
 					p.Socials[sh.Platform] = sh.Handle
 				}
 			}
+			if err := shRows.Err(); err != nil {
+				// log or handle shRows error
+			}
 		}
 
 		// Fetch Custom Links
@@ -162,6 +165,9 @@ func (s *Service) GetByUsername(ctx context.Context, identifier string) (*models
 				if err := clRows.Scan(&cl.ID, &cl.UserID, &cl.Label, &cl.URL, &cl.Order, &cl.CreatedAt); err == nil {
 					p.CustomLinks = append(p.CustomLinks, cl)
 				}
+			}
+			if err := clRows.Err(); err != nil {
+				// log or handle clRows error
 			}
 		}
 

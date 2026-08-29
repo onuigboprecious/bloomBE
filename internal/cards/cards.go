@@ -677,8 +677,10 @@ func (s *Service) GetUserCards(ctx context.Context, userID string) ([]NFCCard, e
 				}
 				c.Signature = SignCardUID(c.CardUid)
 				c.SignedURL = fmt.Sprintf("%s/card/%s?sig=%s", frontendOrigin, c.CardUid, c.Signature)
-				list = append(list, c)
 			}
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
 		}
 		if list == nil {
 			list = []NFCCard{}
