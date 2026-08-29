@@ -140,6 +140,31 @@ func (s *Service) GetByUsername(ctx context.Context, identifier string) (*models
 			p.Socials = make(map[string]interface{})
 		}
 
+		// Fetch Social Handles
+		shRows, err := s.db.QueryContext(ctx, `SELECT id, user_id, platform, handle, created_at FROM social_handles WHERE user_id = $1 ORDER BY created_at ASC`, userID)
+		if err == nil {
+			defer shRows.Close()
+			for shRows.Next() {
+				var sh models.SocialHandle
+				if err := shRows.Scan(&sh.ID, &sh.UserID, &sh.Platform, &sh.Handle, &sh.CreatedAt); err == nil {
+					p.SocialList = append(p.SocialList, sh)
+					p.Socials[sh.Platform] = sh.Handle
+				}
+			}
+		}
+
+		// Fetch Custom Links
+		clRows, err := s.db.QueryContext(ctx, `SELECT id, user_id, label, url, link_order, created_at FROM custom_links WHERE user_id = $1 ORDER BY link_order ASC, created_at ASC`, userID)
+		if err == nil {
+			defer clRows.Close()
+			for clRows.Next() {
+				var cl models.CustomLink
+				if err := clRows.Scan(&cl.ID, &cl.UserID, &cl.Label, &cl.URL, &cl.Order, &cl.CreatedAt); err == nil {
+					p.CustomLinks = append(p.CustomLinks, cl)
+				}
+			}
+		}
+
 		// Fetch Stats
 		p.Stats = s.getStatsForUser(ctx, userID, p.CardUid)
 

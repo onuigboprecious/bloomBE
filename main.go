@@ -15,8 +15,10 @@ import (
 	"github.com/onuigboprecious/infarbloom/backend/internal/cards"
 	"github.com/onuigboprecious/infarbloom/backend/internal/db"
 	"github.com/onuigboprecious/infarbloom/backend/internal/leads"
+	"github.com/onuigboprecious/infarbloom/backend/internal/links"
 	"github.com/onuigboprecious/infarbloom/backend/internal/middleware"
 	"github.com/onuigboprecious/infarbloom/backend/internal/profiles"
+	"github.com/onuigboprecious/infarbloom/backend/internal/socials"
 	"github.com/onuigboprecious/infarbloom/backend/internal/store"
 )
 
@@ -82,6 +84,10 @@ func main() {
 	profilesHandler := profiles.NewHandler(profilesSvc, authSvc)
 	cardsSvc := cards.NewService(database)
 	cardsHandler := cards.NewHandler(cardsSvc, authSvc)
+	socialsSvc := socials.NewService(database)
+	socialsHandler := socials.NewHandler(socialsSvc)
+	linksSvc := links.NewService(database)
+	linksHandler := links.NewHandler(linksSvc)
 	analyticsSvc := analytics.New(database)
 	storeSvc := store.New(database)
 
@@ -91,7 +97,7 @@ func main() {
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"status":"ok","message":"Bloom NFC Backend API Server is live"}`))
+		_, _ = w.Write([]byte(`{"status":"ok","message":"Enlazar NFC Backend API Server is live"}`))
 	})
 
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +106,7 @@ func main() {
 		_, _ = w.Write([]byte(`{"status":"ok","environment":"` + env + `"}`))
 	})
 
-	// 1. Authentication Endpoints
+	// 1. Authentication Endpoints (Support both Bloom and Enlazar specs)
 	mux.HandleFunc("POST /api/signup", authSvc.HandleSignup)
 	mux.HandleFunc("POST /api/login", authSvc.HandleLogin)
 	mux.HandleFunc("POST /api/logout", authSvc.HandleLogout)
@@ -108,6 +114,7 @@ func main() {
 	mux.HandleFunc("POST /api/forgot-password", authSvc.HandleForgotPassword)
 	mux.HandleFunc("POST /api/reset-password", authSvc.HandleResetPassword)
 
+	mux.HandleFunc("POST /api/auth/register", authSvc.HandleSignup)
 	mux.HandleFunc("POST /api/auth/signup", authSvc.HandleSignup)
 	mux.HandleFunc("POST /api/auth/login", authSvc.HandleLogin)
 	mux.HandleFunc("POST /api/auth/logout", authSvc.HandleLogout)
@@ -115,10 +122,33 @@ func main() {
 	mux.HandleFunc("POST /api/auth/forgot-password", authSvc.HandleForgotPassword)
 	mux.HandleFunc("POST /api/auth/reset-password", authSvc.HandleResetPassword)
 
-	// 2. Profiles & Card Management
+	// 2. Profiles & Studio Management
 	mux.HandleFunc("GET /api/profile/check-handle", profilesHandler.HandleCheckHandle)
+	mux.HandleFunc("GET /api/profile/me", profilesHandler.HandleGetMyProfile)
+	mux.HandleFunc("GET /api/profile", profilesHandler.HandleGetMyProfile)
 	mux.HandleFunc("PUT /api/profile/me", profilesHandler.HandleUpdateMyProfile)
+	mux.HandleFunc("PUT /api/profile", profilesHandler.HandleUpdateMyProfile)
+
+	// Enlazer Public Profile routes
+	mux.HandleFunc("GET /api/profile/public/{username}", profilesHandler.HandleGetProfile)
+	mux.HandleFunc("GET /api/profile/public/", profilesHandler.HandleGetProfile)
+	mux.HandleFunc("GET /api/profile/", profilesHandler.HandleGetProfile)
+	mux.HandleFunc("GET /api/profile/{username}", profilesHandler.HandleGetProfile)
+
+	// 3. Dynamic Social Handles (/api/socials)
+	mux.HandleFunc("GET /api/socials", socialsHandler.HandleGetSocials)
+	mux.HandleFunc("POST /api/socials", socialsHandler.HandleSyncSocials)
+	mux.HandleFunc("DELETE /api/socials/{id}", socialsHandler.HandleDeleteSocial)
+
+	// 4. Custom Bio Linktree Buttons (/api/custom-links)
+	mux.HandleFunc("GET /api/custom-links", linksHandler.HandleGetLinks)
+	mux.HandleFunc("POST /api/custom-links", linksHandler.HandleCreateLink)
+	mux.HandleFunc("DELETE /api/custom-links/{id}", linksHandler.HandleDeleteLink)
+
+	// 5. Hardware Cards & Claiming
 	mux.HandleFunc("POST /api/cards/claim", cardsHandler.HandleClaimCard)
+	mux.HandleFunc("POST /api/cards/activate", cardsHandler.HandleActivateCard)
+	mux.HandleFunc("GET /api/cards/me", cardsHandler.HandleGetMyCards)
 
 	// Admin Tag CRUD Endpoints
 	mux.HandleFunc("POST /api/admin/cards", cardsHandler.HandleCreateCard)
@@ -127,22 +157,21 @@ func main() {
 	mux.HandleFunc("DELETE /api/admin/cards/{cardUid}", cardsHandler.HandleDeleteCard)
 	mux.HandleFunc("POST /api/admin/cards/provision", cardsHandler.HandleBatchProvision)
 
-	mux.HandleFunc("GET /api/profile/", profilesHandler.HandleGetProfile)
-	mux.HandleFunc("GET /api/profile/{username}", profilesHandler.HandleGetProfile)
-
+	// vCard downloads
 	mux.HandleFunc("GET /api/vcard/", profilesHandler.HandleGetVCard)
 	mux.HandleFunc("GET /api/vcard/{username}", profilesHandler.HandleGetVCard)
 
-	// 3. Lead Capture Endpoints
+	// 6. Lead Capture Endpoints
 	mux.HandleFunc("POST /api/leads", leadsSvc.HandleCreateLead)
 	mux.HandleFunc("GET /api/leads", leadsSvc.HandleGetLeads)
 	mux.HandleFunc("DELETE /api/leads/{id}", leadsSvc.HandleDeleteLead)
 
-	// 4. Analytics & Tap Tracking
+	// 7. Analytics & Tap Tracking
 	mux.HandleFunc("POST /api/taps/record", analyticsSvc.HandleRecordTap)
+	mux.HandleFunc("POST /api/analytics/tap", analyticsSvc.HandleRecordTap)
 	mux.HandleFunc("GET /api/analytics", analyticsSvc.HandleGetAnalytics)
 
-	// 5. VIP Waitlist & Orders
+	// 8. VIP Waitlist & Orders
 	mux.HandleFunc("POST /api/waitlist", storeSvc.HandleWaitlist)
 	mux.HandleFunc("POST /api/orders", storeSvc.HandleOrders)
 
@@ -153,6 +182,6 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	log.Printf("Bloom API listening on :%s", port)
+	log.Printf("Enlazar API listening on :%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, handler))
 }

@@ -311,7 +311,7 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
                 Need help getting started? Reply directly to this email or visit your <a href="%s" style="color: #00BCFF; text-decoration: none; font-weight: 600;">Dashboard</a>.
               </p>
               <p style="font-size: 12px; color: #CBD5E1; margin: 0;">
-                © %d Bloom Card Technologies Ltd. All rights reserved.
+                © %d Enlazar Technologies Ltd. All rights reserved.
               </p>
             </td>
           </tr>
@@ -323,5 +323,3 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
 </body>
 </html>`, userName, username, profileURL, profileURL, profileURL, dashboardURL, currentYear)
 }
-
-

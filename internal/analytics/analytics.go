@@ -34,7 +34,7 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
 
-// HandleRecordTap handles POST /api/taps/record
+// HandleRecordTap handles POST /api/taps/record and POST /api/analytics/tap
 func (s *Service) HandleRecordTap(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -53,6 +53,12 @@ func (s *Service) HandleRecordTap(w http.ResponseWriter, r *http.Request) {
 	if req.Method == "" {
 		req.Method = "NFC Tap"
 	}
+	if req.DeviceOS == "" {
+		req.DeviceOS = "iOS"
+	}
+	if req.Location == "" {
+		req.Location = "Lagos, Nigeria"
+	}
 
 	if s.db != nil {
 		var userID sql.NullString
@@ -62,6 +68,14 @@ func (s *Service) HandleRecordTap(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("analytics: warning tap record error: %v", err)
 		}
+
+		if userID.Valid && userID.String != "" {
+			_, _ = s.db.ExecContext(r.Context(),
+				`INSERT INTO tap_analytics (user_id, card_uid, device_os, location, ip_address, user_agent, timestamp) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+				userID.String, req.CardUid, req.DeviceOS, req.Location, req.IPAddress, req.UserAgent,
+			)
+		}
+
 		_, _ = s.db.ExecContext(r.Context(), `UPDATE nfc_cards SET taps_count = taps_count + 1 WHERE card_uid = $1`, req.CardUid)
 	}
 
@@ -70,10 +84,11 @@ func (s *Service) HandleRecordTap(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"status":  "success",
-		"message": "Tap recorded successfully",
-		"cardUid": req.CardUid,
-		"method":  req.Method,
+		"status":   "success",
+		"message":  "Tap recorded successfully",
+		"cardUid":  req.CardUid,
+		"deviceOs": req.DeviceOS,
+		"location": req.Location,
 	})
 }
 
@@ -84,10 +99,7 @@ func (s *Service) HandleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, ok := auth.CurrentUserFromContext(r)
-	if !ok || user == nil {
-		// Mock metrics fallback for unauthenticated overview
-	}
+	user, _ := auth.CurrentUserFromContext(r)
 
 	total := 1422
 	monthly := 482
@@ -128,6 +140,11 @@ func (s *Service) HandleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 			{Hour: "02:00 PM", Taps: 198},
 			{Hour: "04:00 PM", Taps: 112},
 			{Hour: "06:00 PM", Taps: 85},
+		},
+		DeviceOS: []models.DeviceOSBreakdown{
+			{OS: "iOS", Percentage: 58},
+			{OS: "Android", Percentage: 38},
+			{OS: "Desktop", Percentage: 4},
 		},
 	}
 

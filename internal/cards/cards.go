@@ -653,6 +653,54 @@ func (h *Handler) HandleBatchProvision(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GetUserCards returns list of physical cards claimed by user
+func (s *Service) GetUserCards(ctx context.Context, userID string) ([]NFCCard, error) {
+	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
+	if frontendOrigin == "" {
+		frontendOrigin = "https://capstone-project.name.ng"
+	}
+
+	if s.db != nil {
+		rows, err := s.db.QueryContext(ctx, `SELECT id, card_uid, user_id, finish_name, status, taps_count, created_at FROM nfc_cards WHERE user_id = $1 ORDER BY created_at DESC`, userID)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		var list []NFCCard
+		for rows.Next() {
+			var c NFCCard
+			var uNull sql.NullString
+			if err := rows.Scan(&c.ID, &c.CardUid, &uNull, &c.FinishName, &c.Status, &c.TapsCount, &c.CreatedAt); err == nil {
+				if uNull.Valid {
+					c.UserID = &uNull.String
+				}
+				c.Signature = SignCardUID(c.CardUid)
+				c.SignedURL = fmt.Sprintf("%s/card/%s?sig=%s", frontendOrigin, c.CardUid, c.Signature)
+				list = append(list, c)
+			}
+		}
+		if list == nil {
+			list = []NFCCard{}
+		}
+		return list, nil
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var list []NFCCard
+	for _, c := range s.cards {
+		if c.UserID != nil && *c.UserID == userID {
+			res := *c
+			res.Signature = SignCardUID(c.CardUid)
+			res.SignedURL = fmt.Sprintf("%s/card/%s?sig=%s", frontendOrigin, c.CardUid, res.Signature)
+			list = append(list, res)
+		}
+	}
+	return list, nil
+}
+
 // HandleClaimCard handles POST /api/cards/claim
 func (h *Handler) HandleClaimCard(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -685,4 +733,31 @@ func (h *Handler) HandleClaimCard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, card)
+}
+
+// HandleActivateCard handles POST /api/cards/activate (Enlazer Specification)
+func (h *Handler) HandleActivateCard(w http.ResponseWriter, r *http.Request) {
+	h.HandleClaimCard(w, r)
+}
+
+// HandleGetMyCards handles GET /api/cards/me
+func (h *Handler) HandleGetMyCards(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	user, ok := auth.CurrentUserFromContext(r)
+	if !ok || user == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	list, err := h.svc.GetUserCards(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, list)
 }

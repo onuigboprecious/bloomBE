@@ -91,7 +91,32 @@ func (h *Handler) HandleGetProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, profile)
 }
 
-// HandleUpdateMyProfile handles PUT /api/profile/me (Protected)
+// HandleGetMyProfile handles GET /api/profile/me or GET /api/profile (Protected)
+func (h *Handler) HandleGetMyProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	user, ok := auth.CurrentUserFromContext(r)
+	if !ok || user == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	profile, err := h.svc.GetByUsername(r.Context(), user.Username)
+	if err != nil {
+		profile, err = h.svc.GetByUsername(r.Context(), user.Email)
+	}
+	if err != nil {
+		// Fallback to default
+		profile, _ = h.svc.GetByUsername(r.Context(), "precious")
+	}
+
+	writeJSON(w, http.StatusOK, profile)
+}
+
+// HandleUpdateMyProfile handles PUT /api/profile/me and PUT /api/profile (Protected)
 func (h *Handler) HandleUpdateMyProfile(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut && r.Method != http.MethodPatch {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
