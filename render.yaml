@@ -10,4 +10,4 @@ services:
       - key: APP_ENV
         value: production
       - key: FRONTEND_ORIGIN
-        value: https://capstone-project.name.ng
+        value: https://www.enlazer.com.ng

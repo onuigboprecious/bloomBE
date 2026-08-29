@@ -8,8 +8,8 @@ import (
 func TestBuildWelcomeEmailHTML(t *testing.T) {
 	userName := "Precious Onuigbo"
 	username := "precious"
-	profileURL := "https://capstone-project.name.ng/@precious"
-	dashboardURL := "https://capstone-project.name.ng/dashboard"
+	profileURL := "https://www.enlazer.com.ng/@precious"
+	dashboardURL := "https://www.enlazer.com.ng/dashboard"
 
 	html := buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL)
 

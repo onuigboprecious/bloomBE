@@ -107,7 +107,7 @@ func (s *Service) CreateCard(ctx context.Context, cardUid, finishName, status st
 
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
 	if frontendOrigin == "" {
-		frontendOrigin = "https://capstone-project.name.ng"
+		frontendOrigin = "https://www.enlazer.com.ng"
 	}
 	sig := SignCardUID(cardUid)
 	signedURL := fmt.Sprintf("%s/card/%s?sig=%s", frontendOrigin, cardUid, sig)
@@ -169,7 +169,7 @@ func (s *Service) ProvisionBatch(ctx context.Context, cardUids []string, finishN
 
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
 	if frontendOrigin == "" {
-		frontendOrigin = "https://capstone-project.name.ng"
+		frontendOrigin = "https://www.enlazer.com.ng"
 	}
 
 	var result []NFCCard
@@ -252,7 +252,7 @@ func (s *Service) ProvisionBatch(ctx context.Context, cardUids []string, finishN
 func (s *Service) ListAllCards(ctx context.Context) ([]NFCCard, error) {
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
 	if frontendOrigin == "" {
-		frontendOrigin = "https://capstone-project.name.ng"
+		frontendOrigin = "https://www.enlazer.com.ng"
 	}
 
 	if s.db != nil {
@@ -657,7 +657,7 @@ func (h *Handler) HandleBatchProvision(w http.ResponseWriter, r *http.Request) {
 func (s *Service) GetUserCards(ctx context.Context, userID string) ([]NFCCard, error) {
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
 	if frontendOrigin == "" {
-		frontendOrigin = "https://capstone-project.name.ng"
+		frontendOrigin = "https://www.enlazer.com.ng"
 	}
 
 	if s.db != nil {

@@ -11,7 +11,7 @@ func CORS(allowedOrigin string, next http.Handler) http.Handler {
 			if reqOrigin != "" {
 				origin = reqOrigin
 			} else {
-				origin = "https://capstone-project.name.ng"
+				origin = "https://www.enlazer.com.ng"
 			}
 		}
 

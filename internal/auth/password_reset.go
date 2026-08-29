@@ -98,7 +98,7 @@ func (s *Service) HandleForgotPassword(w http.ResponseWriter, r *http.Request) {
 
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
 	if frontendOrigin == "" {
-		frontendOrigin = "https://capstone-project.name.ng"
+		frontendOrigin = "https://www.enlazer.com.ng"
 	}
 	resetURL := fmt.Sprintf("%s/reset-password?token=%s", frontendOrigin, token)
 

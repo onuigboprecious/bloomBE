@@ -116,7 +116,7 @@ func sendResendWelcomeEmail(toEmail, userName, username string) {
 
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
 	if frontendOrigin == "" {
-		frontendOrigin = "https://capstone-project.name.ng"
+		frontendOrigin = "https://www.enlazer.com.ng"
 	}
 	frontendOrigin = strings.TrimSuffix(frontendOrigin, "/")
 	profileURL := fmt.Sprintf("%s/@%s", frontendOrigin, username)
