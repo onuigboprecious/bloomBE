@@ -430,7 +430,12 @@ func (s *Service) ClaimCard(ctx context.Context, userID, cardUid string) (*NFCCa
 		}
 
 		// Update profile table link
-		_, _ = s.db.ExecContext(ctx, `INSERT INTO profiles (user_id, card_uid) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET card_uid = $2`, userID, cardUid)
+		res, err := s.db.ExecContext(ctx, `UPDATE profiles SET card_uid = $2 WHERE user_id = $1`, userID, cardUid)
+		if err == nil {
+			if rows, _ := res.RowsAffected(); rows == 0 {
+				_, _ = s.db.ExecContext(ctx, `INSERT INTO profiles (user_id, card_uid) VALUES ($1, $2)`, userID, cardUid)
+			}
+		}
 
 		var c NFCCard
 		var uNull sql.NullString
