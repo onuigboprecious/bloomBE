@@ -122,12 +122,11 @@ func sendResendWelcomeEmail(toEmail, userName, username string) {
 	profileURL := fmt.Sprintf("%s/@%s", frontendOrigin, username)
 	dashboardURL := fmt.Sprintf("%s/dashboard", frontendOrigin)
 
-	fromEmail := os.Getenv("FROM_EMAIL")
+	fromEmail := os.Getenv("RESEND_FROM")
 	if fromEmail == "" {
-		fromEmail = "Bloom <onboarding@resend.dev>"
+		fromEmail = "Enlazer <onboarding@resend.dev>"
 	}
-
-	subject := fmt.Sprintf("Welcome to Bloom, %s! 🎉 Your Digital Card is Ready", userName)
+	subject := fmt.Sprintf("Welcome to Enlazer, %s! Your Digital Card is Ready", userName)
 	htmlContent := buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL)
 
 	payload := map[string]interface{}{
@@ -171,7 +170,7 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to Bloom</title>
+  <title>Welcome to Enlazer</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #F1F5F9; font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #1E293B;">
   <table role="presentation" width="100%%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F1F5F9; padding: 40px 10px;">
@@ -183,7 +182,7 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
           <tr>
             <td style="background-color: #0F172A; padding: 36px 40px; text-align: center; background-image: linear-gradient(135deg, #0F172A 0%%, #1E293B 100%%);">
               <div style="font-size: 32px; font-weight: 900; color: #ffffff; letter-spacing: -0.5px; margin-bottom: 6px;">
-                bloom<span style="color: #00BCFF;">.</span>
+                enlazer<span style="color: #00BCFF;">.</span>
               </div>
               <div style="color: #94A3B8; font-size: 13px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase;">
                 Digital Business Cards & Instant NFC Sharing
@@ -195,7 +194,7 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
           <tr>
             <td style="padding: 40px 36px;">
               <h1 style="color: #0F172A; font-size: 24px; font-weight: 800; margin-top: 0; margin-bottom: 12px; line-height: 1.3;">
-                Welcome to Bloom, %s! 👋
+                Welcome to Enlazer, %s!
               </h1>
               <p style="color: #475569; font-size: 15px; line-height: 1.6; margin-top: 0; margin-bottom: 28px;">
                 Your account is live and your digital card profile is ready. Here is how to link your physical card and let people view your profile with a simple tap!
@@ -233,7 +232,7 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
 
               <!-- SECTION 1: How Card Linking Works -->
               <div style="font-size: 17px; font-weight: 800; color: #0F172A; margin-bottom: 14px;">
-                💳 Step 1: How to Link Your Physical Bloom Card
+                💳 Step 1: How to Link Your Physical Enlazer Card
               </div>
 
               <table role="presentation" width="100%%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
@@ -252,7 +251,7 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
                   </td>
                   <td valign="top" style="padding-bottom: 16px; padding-left: 10px;">
                     <div style="font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 2px;">Tap Card or Enter Code</div>
-                    <div style="font-size: 13px; color: #64748B; line-height: 1.5;">Tap your physical Bloom NFC card on your phone, or manually enter your Card UID (e.g. <code>BLM-9921-NFC</code>).</div>
+                    <div style="font-size: 13px; color: #64748B; line-height: 1.5;">Tap your physical Enlazer NFC card on your phone, or manually enter your Card UID (e.g. <code>BLM-9921-NFC</code>).</div>
                   </td>
                 </tr>
                 <tr>
@@ -278,7 +277,7 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
                   </td>
                   <td valign="top" style="padding-bottom: 16px; padding-left: 10px;">
                     <div style="font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 2px;">Tap Card Against Phone</div>
-                    <div style="font-size: 13px; color: #64748B; line-height: 1.5;">Hold your physical Bloom Card against the top back of any iPhone or center back of an Android phone.</div>
+                    <div style="font-size: 13px; color: #64748B; line-height: 1.5;">Hold your physical Enlazer Card against the top back of any iPhone or center back of an Android phone.</div>
                   </td>
                 </tr>
                 <tr>

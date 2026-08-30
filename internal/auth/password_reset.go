@@ -122,14 +122,13 @@ func sendResendResetEmail(toEmail, resetURL string) {
 	}
 
 	payload := map[string]interface{}{
-		"from":    "Bloom <onboarding@resend.dev>",
+		"from":    "Enlazer <onboarding@resend.dev>",
 		"to":      []string{toEmail},
-		"subject": "Reset Your Bloom Password",
+		"subject": "Reset Your Enlazer Password",
 		"html": fmt.Sprintf(`
-			<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-				<h2 style="color: #00BCFF;">Reset Your Password</h2>
-				<p>Hello,</p>
-				<p>We received a request to reset your password for your Bloom account.</p>
+			<div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
+				<h2 style="color: #0F172A;">Reset Your Password</h2>
+				<p>We received a request to reset your password for your Enlazer account.</p>
 				<p style="margin: 25px 0;">
 					<a href="%s" style="background-color: #00BCFF; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Reset Password</a>
 				</p>
