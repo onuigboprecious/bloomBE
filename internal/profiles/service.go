@@ -15,7 +15,7 @@ import (
 var (
 	ErrProfileNotFound    = errors.New("profile not found")
 	ErrUsernameTaken      = errors.New("username is already taken")
-	ErrCardAlreadyClaimed  = errors.New("card is already claimed")
+	ErrCardAlreadyClaimed = errors.New("card is already claimed")
 	ErrCardUnclaimed      = errors.New("unclaimed_card")
 	ErrUnregisteredCard   = errors.New("unregistered_card")
 )
@@ -24,11 +24,11 @@ type Service struct {
 	db *sql.DB
 
 	// In-memory fallback
-	mu          sync.RWMutex
-	profiles    map[string]*models.BloomProfile // username -> BloomProfile
-	cardToUser  map[string]string               // cardUid -> username
-	userToCard  map[string]string               // username -> cardUid
-	taps        map[string]int                  // cardUid -> count
+	mu         sync.RWMutex
+	profiles   map[string]*models.BloomProfile // username -> BloomProfile
+	cardToUser map[string]string               // cardUid -> username
+	userToCard map[string]string               // username -> cardUid
+	taps       map[string]int                  // cardUid -> count
 }
 
 func NewService(db *sql.DB) *Service {
@@ -180,7 +180,6 @@ func (s *Service) GetByUsername(ctx context.Context, identifier string) (*models
 	return s.getFallbackProfile(identifier)
 }
 
-
 func (s *Service) getFallbackProfile(identifier string) (*models.BloomProfile, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -252,10 +251,8 @@ func (s *Service) UpdateMyProfile(ctx context.Context, userID string, req models
 			socialsArg = nil
 		}
 
-		query := `
-		INSERT INTO profiles (user_id, title, company, bio, avatar, phone, website, location, theme, layout, socials_json, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11::jsonb, '{}'::jsonb), NOW())
-		ON CONFLICT (user_id) DO UPDATE SET
+		updateQuery := `
+		UPDATE profiles SET
 			title = COALESCE(NULLIF($2, ''), profiles.title),
 			company = COALESCE(NULLIF($3, ''), profiles.company),
 			bio = COALESCE(NULLIF($4, ''), profiles.bio),
@@ -267,19 +264,47 @@ func (s *Service) UpdateMyProfile(ctx context.Context, userID string, req models
 			layout = COALESCE(NULLIF($10, ''), profiles.layout),
 			socials_json = CASE WHEN $11::text IS NULL THEN profiles.socials_json ELSE $11::jsonb END,
 			updated_at = NOW()
+		WHERE user_id = $1
 		`
 		var title, company, bio, avatar, phone, website, location, theme, layout string
-		if req.Title != nil { title = *req.Title }
-		if req.Company != nil { company = *req.Company }
-		if req.Bio != nil { bio = *req.Bio }
-		if req.Avatar != nil { avatar = *req.Avatar }
-		if req.Phone != nil { phone = *req.Phone }
-		if req.Website != nil { website = *req.Website }
-		if req.Location != nil { location = *req.Location }
-		if req.Theme != nil { theme = *req.Theme }
-		if req.Layout != nil { layout = *req.Layout }
+		if req.Title != nil {
+			title = *req.Title
+		}
+		if req.Company != nil {
+			company = *req.Company
+		}
+		if req.Bio != nil {
+			bio = *req.Bio
+		}
+		if req.Avatar != nil {
+			avatar = *req.Avatar
+		}
+		if req.Phone != nil {
+			phone = *req.Phone
+		}
+		if req.Website != nil {
+			website = *req.Website
+		}
+		if req.Location != nil {
+			location = *req.Location
+		}
+		if req.Theme != nil {
+			theme = *req.Theme
+		}
+		if req.Layout != nil {
+			layout = *req.Layout
+		}
 
-		_, err := s.db.ExecContext(ctx, query, userID, title, company, bio, avatar, phone, website, location, theme, layout, socialsArg)
+		res, err := s.db.ExecContext(ctx, updateQuery, userID, title, company, bio, avatar, phone, website, location, theme, layout, socialsArg)
+		if err == nil {
+			if rows, _ := res.RowsAffected(); rows == 0 {
+				insertQuery := `
+				INSERT INTO profiles (user_id, title, company, bio, avatar, phone, website, location, theme, layout, socials_json, updated_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11::jsonb, '{}'::jsonb), NOW())
+				`
+				_, err = s.db.ExecContext(ctx, insertQuery, userID, title, company, bio, avatar, phone, website, location, theme, layout, socialsArg)
+			}
+		}
 		if err != nil {
 			return nil, fmt.Errorf("failed to update profile: %w", err)
 		}
@@ -319,17 +344,39 @@ func (s *Service) UpdateMyProfile(ctx context.Context, userID string, req models
 		s.profiles["precious"] = p
 	}
 
-	if req.Name != nil { p.Name = *req.Name }
-	if req.Title != nil { p.Title = *req.Title }
-	if req.Company != nil { p.Company = *req.Company }
-	if req.Bio != nil { p.Bio = *req.Bio }
-	if req.Avatar != nil { p.Avatar = *req.Avatar }
-	if req.Phone != nil { p.Phone = *req.Phone }
-	if req.Website != nil { p.Website = *req.Website }
-	if req.Location != nil { p.Location = *req.Location }
-	if req.Theme != nil { p.Theme = *req.Theme }
-	if req.Layout != nil { p.Layout = *req.Layout }
-	if req.Socials != nil { p.Socials = req.Socials }
+	if req.Name != nil {
+		p.Name = *req.Name
+	}
+	if req.Title != nil {
+		p.Title = *req.Title
+	}
+	if req.Company != nil {
+		p.Company = *req.Company
+	}
+	if req.Bio != nil {
+		p.Bio = *req.Bio
+	}
+	if req.Avatar != nil {
+		p.Avatar = *req.Avatar
+	}
+	if req.Phone != nil {
+		p.Phone = *req.Phone
+	}
+	if req.Website != nil {
+		p.Website = *req.Website
+	}
+	if req.Location != nil {
+		p.Location = *req.Location
+	}
+	if req.Theme != nil {
+		p.Theme = *req.Theme
+	}
+	if req.Layout != nil {
+		p.Layout = *req.Layout
+	}
+	if req.Socials != nil {
+		p.Socials = req.Socials
+	}
 
 	res := *p
 	return &res, nil

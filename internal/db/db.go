@@ -91,6 +91,7 @@ func migrateSchema(db *sql.DB) error {
 	);
 	CREATE INDEX IF NOT EXISTS idx_profiles_card_uid ON profiles(card_uid);
 	CREATE INDEX IF NOT EXISTS idx_profiles_user_id ON profiles(user_id);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_user_id_unique ON profiles(user_id);
 
 	CREATE TABLE IF NOT EXISTS social_handles (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
