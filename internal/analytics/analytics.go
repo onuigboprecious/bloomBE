@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/onuigboprecious/infarbloom/backend/internal/auth"
@@ -61,22 +62,64 @@ func (s *Service) HandleRecordTap(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.db != nil {
-		var userID sql.NullString
-		_ = s.db.QueryRowContext(r.Context(), `SELECT user_id FROM nfc_cards WHERE card_uid = $1`, req.CardUid).Scan(&userID)
+		cardUid := strings.TrimSpace(req.CardUid)
+		var actualCardUid string
+		var userID string
+		var uNull sql.NullString
 
-		_, err := s.db.ExecContext(r.Context(), `INSERT INTO taps (card_uid, user_id, method, tapped_at) VALUES ($1, $2, $3, NOW())`, req.CardUid, userID, req.Method)
+		// 1. Check nfc_cards
+		err := s.db.QueryRowContext(r.Context(), `SELECT card_uid, user_id FROM nfc_cards WHERE LOWER(card_uid) = LOWER($1)`, cardUid).Scan(&actualCardUid, &uNull)
+		if err == nil {
+			if uNull.Valid {
+				userID = uNull.String
+			}
+		} else {
+			// 2. Check profiles
+			err = s.db.QueryRowContext(r.Context(), `SELECT card_uid, user_id FROM profiles WHERE LOWER(card_uid) = LOWER($1) OR LOWER(user_id::text) = LOWER($1)`, cardUid).Scan(&actualCardUid, &userID)
+			if err != nil {
+				// 3. Check users table by username or email
+				_ = s.db.QueryRowContext(r.Context(), `
+					SELECT COALESCE(p.card_uid, ''), u.id 
+					FROM users u 
+					LEFT JOIN profiles p ON p.user_id = u.id 
+					WHERE LOWER(u.username) = LOWER($1) OR LOWER(u.email) = LOWER($1)
+				`, cardUid).Scan(&actualCardUid, &userID)
+			}
+		}
+
+		if actualCardUid == "" {
+			actualCardUid = cardUid
+		}
+
+		var uVal interface{} = nil
+		if userID != "" {
+			uVal = userID
+		}
+
+		_, err = s.db.ExecContext(r.Context(), `INSERT INTO taps (card_uid, user_id, method, tapped_at) VALUES ($1, $2, $3, NOW())`, actualCardUid, uVal, req.Method)
 		if err != nil {
 			log.Printf("analytics: warning tap record error: %v", err)
 		}
 
-		if userID.Valid && userID.String != "" {
+		if userID != "" {
 			_, _ = s.db.ExecContext(r.Context(),
 				`INSERT INTO tap_analytics (user_id, card_uid, device_os, location, ip_address, user_agent, timestamp) VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-				userID.String, req.CardUid, req.DeviceOS, req.Location, req.IPAddress, req.UserAgent,
+				userID, actualCardUid, req.DeviceOS, req.Location, req.IPAddress, req.UserAgent,
 			)
 		}
 
-		_, _ = s.db.ExecContext(r.Context(), `UPDATE nfc_cards SET taps_count = taps_count + 1 WHERE card_uid = $1`, req.CardUid)
+		// Update taps_count on nfc_cards case-insensitively
+		res, err := s.db.ExecContext(r.Context(), `UPDATE nfc_cards SET taps_count = taps_count + 1 WHERE LOWER(card_uid) = LOWER($1)`, actualCardUid)
+		if err == nil {
+			if rows, _ := res.RowsAffected(); rows == 0 {
+				// Insert if card row doesn't exist yet
+				_, _ = s.db.ExecContext(r.Context(), `
+					INSERT INTO nfc_cards (card_uid, user_id, finish_name, status, taps_count, created_at)
+					VALUES ($1, $2, 'NFC Card', 'claimed', 1, NOW())
+					ON CONFLICT (card_uid) DO UPDATE SET taps_count = nfc_cards.taps_count + 1
+				`, actualCardUid, uVal)
+			}
+		}
 	}
 
 	s.mu.Lock()

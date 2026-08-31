@@ -257,7 +257,9 @@ func (s *Service) ListAllCards(ctx context.Context) ([]NFCCard, error) {
 
 	if s.db != nil {
 		query := `
-		SELECT c.id, c.card_uid, c.user_id, c.finish_name, c.status, c.taps_count, c.created_at, COALESCE(u.username, u.name, '')
+		SELECT c.id, c.card_uid, c.user_id, c.finish_name, c.status, 
+		       GREATEST(c.taps_count, COALESCE((SELECT COUNT(*) FROM taps t WHERE LOWER(t.card_uid) = LOWER(c.card_uid) OR (t.user_id IS NOT NULL AND c.user_id IS NOT NULL AND t.user_id = c.user_id)), 0)) AS taps_count,
+		       c.created_at, COALESCE(u.username, u.name, '')
 		FROM nfc_cards c
 		LEFT JOIN users u ON c.user_id = u.id
 		ORDER BY c.created_at DESC
@@ -666,7 +668,15 @@ func (s *Service) GetUserCards(ctx context.Context, userID string) ([]NFCCard, e
 	}
 
 	if s.db != nil {
-		rows, err := s.db.QueryContext(ctx, `SELECT id, card_uid, user_id, finish_name, status, taps_count, created_at FROM nfc_cards WHERE user_id = $1 ORDER BY created_at DESC`, userID)
+		query := `
+		SELECT id, card_uid, user_id, finish_name, status, 
+		       GREATEST(taps_count, COALESCE((SELECT COUNT(*) FROM taps t WHERE LOWER(t.card_uid) = LOWER(nfc_cards.card_uid) OR (t.user_id IS NOT NULL AND nfc_cards.user_id IS NOT NULL AND t.user_id = nfc_cards.user_id)), 0)) AS taps_count,
+		       created_at 
+		FROM nfc_cards 
+		WHERE user_id = $1 
+		ORDER BY created_at DESC
+		`
+		rows, err := s.db.QueryContext(ctx, query, userID)
 		if err != nil {
 			return nil, err
 		}
