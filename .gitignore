@@ -18,8 +18,10 @@ bin/
 # Dependency directories
 vendor/
 
-# Go workspace file
+# Go workspace files
 go.work
+go.work.sum
+*.work.sum
 
 # Local environment
 .env
