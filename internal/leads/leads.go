@@ -85,7 +85,6 @@ func (s *Service) HandleCreateLead(w http.ResponseWriter, r *http.Request) {
 		req.CardUid = "BLM-9921-NFC"
 	}
 
-	req.ID = fmt.Sprintf("lead-%d", time.Now().UnixNano())
 	req.CreatedAt = time.Now()
 
 	if s.db != nil {
@@ -100,14 +99,20 @@ func (s *Service) HandleCreateLead(w http.ResponseWriter, r *http.Request) {
 			_ = s.db.QueryRowContext(r.Context(), `SELECT id FROM users ORDER BY created_at ASC LIMIT 1`).Scan(&userID)
 		}
 
-		_, err := s.db.ExecContext(
+		var dbID string
+		err := s.db.QueryRowContext(
 			r.Context(),
-			`INSERT INTO leads (id, user_id, card_uid, name, email, phone, role, method, notes, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-			req.ID, userID, req.CardUid, req.Name, req.Email, req.Phone, req.Role, req.Method, req.Notes, req.CreatedAt,
-		)
+			`INSERT INTO leads (user_id, card_uid, name, email, phone, role, method, notes, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+			userID, req.CardUid, req.Name, req.Email, req.Phone, req.Role, req.Method, req.Notes, req.CreatedAt,
+		).Scan(&dbID)
 		if err != nil {
 			log.Printf("leads: warning DB insert: %v", err)
+			req.ID = fmt.Sprintf("lead-%d", time.Now().UnixNano())
+		} else {
+			req.ID = dbID
 		}
+	} else {
+		req.ID = fmt.Sprintf("lead-%d", time.Now().UnixNano())
 	}
 
 	s.mu.Lock()
@@ -189,7 +194,12 @@ func (s *Service) HandleDeleteLead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.db != nil {
-		_, _ = s.db.ExecContext(r.Context(), `DELETE FROM leads WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)`, leadID, user.ID)
+		_, err := s.db.ExecContext(r.Context(), `DELETE FROM leads WHERE id::text = $1 AND (user_id = $2 OR user_id IS NULL)`, leadID, user.ID)
+		if err != nil {
+			log.Printf("Error deleting lead from DB (leadID: %s): %v", leadID, err)
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("database error: %v", err))
+			return
+		}
 	}
 
 	s.mu.Lock()
