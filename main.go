@@ -122,6 +122,12 @@ func main() {
 	mux.HandleFunc("POST /api/auth/forgot-password", authSvc.HandleForgotPassword)
 	mux.HandleFunc("POST /api/auth/reset-password", authSvc.HandleResetPassword)
 
+	// Google OAuth & ID Token Endpoints
+	mux.HandleFunc("POST /api/auth/google", authSvc.HandleGoogleAuth)
+	mux.HandleFunc("POST /api/google/login", authSvc.HandleGoogleAuth)
+	mux.HandleFunc("GET /api/auth/google/login", authSvc.HandleGoogleOAuthLogin)
+	mux.HandleFunc("GET /api/auth/google/callback", authSvc.HandleGoogleOAuthCallback)
+
 	// 2. Profiles & Studio Management
 	mux.HandleFunc("GET /api/profile/check-handle", profilesHandler.HandleCheckHandle)
 	mux.HandleFunc("GET /api/profile/me", profilesHandler.HandleGetMyProfile)

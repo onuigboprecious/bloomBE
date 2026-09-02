@@ -130,14 +130,14 @@ func currentUser(r *http.Request) (*User, bool) {
 	// If DB is available, query DB for active session
 	if activeService != nil && activeService.db != nil {
 		query := `
-		SELECT u.id, u.email, u.name, COALESCE(u.username, ''), u.password_hash, u.is_pro, u.created_at, u.updated_at
+		SELECT u.id, u.email, u.name, COALESCE(u.username, ''), COALESCE(u.password_hash, ''), COALESCE(u.google_id, ''), COALESCE(u.avatar_url, ''), u.is_pro, u.created_at, u.updated_at
 		FROM sessions s
 		JOIN users u ON s.user_id = u.id
 		WHERE s.token = $1 AND s.expires_at > $2
 		`
 		var u User
 		err := activeService.db.QueryRow(query, token, time.Now()).Scan(
-			&u.ID, &u.Email, &u.Name, &u.Username, &u.PasswordHash, &u.IsPro, &u.CreatedAt, &u.UpdatedAt,
+			&u.ID, &u.Email, &u.Name, &u.Username, &u.PasswordHash, &u.GoogleID, &u.AvatarURL, &u.IsPro, &u.CreatedAt, &u.UpdatedAt,
 		)
 		if err == nil {
 			return &u, true
@@ -210,10 +210,10 @@ func destroySession(r *http.Request) {
 func findUserByEmail(email string) (*User, bool) {
 	// Query DB first if connected
 	if activeService != nil && activeService.db != nil {
-		query := `SELECT id, email, name, COALESCE(username, ''), password_hash, is_pro, created_at, updated_at FROM users WHERE email = $1`
+		query := `SELECT id, email, name, COALESCE(username, ''), COALESCE(password_hash, ''), COALESCE(google_id, ''), COALESCE(avatar_url, ''), is_pro, created_at, updated_at FROM users WHERE email = $1`
 		var u User
 		err := activeService.db.QueryRow(query, email).Scan(
-			&u.ID, &u.Email, &u.Name, &u.Username, &u.PasswordHash, &u.IsPro, &u.CreatedAt, &u.UpdatedAt,
+			&u.ID, &u.Email, &u.Name, &u.Username, &u.PasswordHash, &u.GoogleID, &u.AvatarURL, &u.IsPro, &u.CreatedAt, &u.UpdatedAt,
 		)
 		if err == nil {
 			return &u, true
@@ -231,15 +231,58 @@ func findUserByEmail(email string) (*User, bool) {
 	return u, ok
 }
 
+func findUserByGoogleID(googleID string) (*User, bool) {
+	if googleID == "" {
+		return nil, false
+	}
+	// Query DB first if connected
+	if activeService != nil && activeService.db != nil {
+		query := `SELECT id, email, name, COALESCE(username, ''), COALESCE(password_hash, ''), COALESCE(google_id, ''), COALESCE(avatar_url, ''), is_pro, created_at, updated_at FROM users WHERE google_id = $1`
+		var u User
+		err := activeService.db.QueryRow(query, googleID).Scan(
+			&u.ID, &u.Email, &u.Name, &u.Username, &u.PasswordHash, &u.GoogleID, &u.AvatarURL, &u.IsPro, &u.CreatedAt, &u.UpdatedAt,
+		)
+		if err == nil {
+			return &u, true
+		}
+	}
+
+	// Fallback to in-memory store
+	mu.RLock()
+	defer mu.RUnlock()
+	for _, u := range users {
+		if u.GoogleID == googleID {
+			return u, true
+		}
+	}
+	return nil, false
+}
+
 func saveUser(u *User) error {
 	// Persist to DB if connected
 	if activeService != nil && activeService.db != nil {
-		query := `INSERT INTO users (id, email, name, username, password_hash, is_pro, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
-		var usernameNull sql.NullString
+		query := `
+		INSERT INTO users (id, email, name, username, password_hash, google_id, avatar_url, is_pro, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		ON CONFLICT (id) DO UPDATE SET
+			google_id = EXCLUDED.google_id,
+			avatar_url = EXCLUDED.avatar_url,
+			updated_at = EXCLUDED.updated_at
+		`
+		var usernameNull, passNull, googleNull, avatarNull sql.NullString
 		if u.Username != "" {
 			usernameNull = sql.NullString{String: u.Username, Valid: true}
 		}
-		_, err := activeService.db.Exec(query, u.ID, u.Email, u.Name, usernameNull, u.PasswordHash, u.IsPro, u.CreatedAt, u.UpdatedAt)
+		if u.PasswordHash != "" {
+			passNull = sql.NullString{String: u.PasswordHash, Valid: true}
+		}
+		if u.GoogleID != "" {
+			googleNull = sql.NullString{String: u.GoogleID, Valid: true}
+		}
+		if u.AvatarURL != "" {
+			avatarNull = sql.NullString{String: u.AvatarURL, Valid: true}
+		}
+		_, err := activeService.db.Exec(query, u.ID, u.Email, u.Name, usernameNull, passNull, googleNull, avatarNull, u.IsPro, u.CreatedAt, u.UpdatedAt)
 		if err != nil {
 			return errors.New("user with this email or username already exists")
 		}
@@ -248,9 +291,6 @@ func saveUser(u *User) error {
 	// Update in-memory cache
 	mu.Lock()
 	defer mu.Unlock()
-	if _, exists := byEmail[u.Email]; exists && (activeService == nil || activeService.db == nil) {
-		return errors.New("user already exists")
-	}
 	users[u.ID] = u
 	byEmail[u.Email] = u.ID
 	return nil

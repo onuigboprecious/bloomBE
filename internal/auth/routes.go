@@ -8,6 +8,9 @@ func registerAuthRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/auth/login", handleLogin)
 	mux.HandleFunc("/api/auth/logout", handleLogout)
 	mux.HandleFunc("/api/auth/me", requireAuth(handleMe))
+	mux.HandleFunc("/api/auth/google", handleGoogleAuth)
+	mux.HandleFunc("/api/auth/google/login", handleGoogleOAuthLogin)
+	mux.HandleFunc("/api/auth/google/callback", handleGoogleOAuthCallback)
 }
 
 // RegisterAuthRoutes is the exported wrapper to register authentication routes.

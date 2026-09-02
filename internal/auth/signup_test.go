@@ -13,7 +13,7 @@ func TestBuildWelcomeEmailHTML(t *testing.T) {
 
 	html := buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL)
 
-	if !strings.Contains(html, "Welcome to Bloom, Precious Onuigbo!") {
+	if !strings.Contains(html, "Welcome to Enlazer, Precious Onuigbo!") {
 		t.Errorf("expected HTML to contain welcome greeting for user")
 	}
 

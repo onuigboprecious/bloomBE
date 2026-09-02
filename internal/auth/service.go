@@ -42,10 +42,16 @@ func (s *Service) initSchema() error {
 		id VARCHAR(64) PRIMARY KEY,
 		email VARCHAR(255) UNIQUE NOT NULL,
 		name VARCHAR(255) NOT NULL,
-		password_hash VARCHAR(255) NOT NULL,
+		password_hash VARCHAR(255),
+		google_id VARCHAR(128),
+		avatar_url VARCHAR(512),
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
+
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id VARCHAR(128);
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(512);
+	ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
 
 	CREATE TABLE IF NOT EXISTS sessions (
 		id VARCHAR(64) PRIMARY KEY,
@@ -56,6 +62,7 @@ func (s *Service) initSchema() error {
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL;
 	CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);
 	`
 

@@ -9,6 +9,8 @@ type User struct {
 	Name         string    `json:"name"`
 	Username     string    `json:"username"`
 	PasswordHash string    `json:"-"`
+	GoogleID     string    `json:"google_id,omitempty"`
+	AvatarURL    string    `json:"avatar_url,omitempty"`
 	IsPro        bool      `json:"is_pro"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
@@ -20,6 +22,8 @@ type UserPublic struct {
 	Name      string    `json:"name"`
 	Email     string    `json:"email"`
 	Username  string    `json:"username"`
+	AvatarURL string    `json:"avatar_url,omitempty"`
+	GoogleID  string    `json:"google_id,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
@@ -39,6 +43,8 @@ func (u *User) ToPublic() UserPublic {
 		Name:      u.Name,
 		Email:     u.Email,
 		Username:  u.Username,
+		AvatarURL: u.AvatarURL,
+		GoogleID:  u.GoogleID,
 		CreatedAt: u.CreatedAt,
 	}
 }
