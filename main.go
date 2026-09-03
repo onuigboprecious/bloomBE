@@ -180,6 +180,10 @@ func main() {
 	// 8. VIP Waitlist & Orders & Paystack Payment Stack
 	mux.HandleFunc("POST /api/waitlist", storeSvc.HandleWaitlist)
 	mux.HandleFunc("POST /api/orders", storeSvc.HandleOrders)
+	mux.HandleFunc("GET /api/orders", storeSvc.HandleListOrders)
+	mux.HandleFunc("GET /api/admin/orders", storeSvc.HandleListOrders)
+	mux.HandleFunc("PATCH /api/admin/orders/{id}/status", storeSvc.HandleUpdateOrderStatus)
+	mux.HandleFunc("PUT /api/admin/orders/{id}/status", storeSvc.HandleUpdateOrderStatus)
 	mux.HandleFunc("POST /api/paystack/initialize", storeSvc.HandleInitializePaystack)
 	mux.HandleFunc("GET /api/paystack/verify/{reference}", storeSvc.HandleVerifyPaystack)
 	mux.HandleFunc("GET /api/paystack/verify", storeSvc.HandleVerifyPaystack)

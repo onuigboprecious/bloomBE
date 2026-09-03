@@ -21,8 +21,9 @@ import (
 
 
 type Service struct {
-	db *sql.DB
-	mu sync.RWMutex
+	db           *sql.DB
+	mu           sync.RWMutex
+	memoryOrders []map[string]interface{}
 }
 
 func New(db *sql.DB) *Service {
@@ -94,6 +95,26 @@ func (s *Service) HandleOrders(w http.ResponseWriter, r *http.Request) {
 
 	orderID := fmt.Sprintf("ord-%d", time.Now().UnixNano())
 
+	orderItem := map[string]interface{}{
+		"id":              orderID,
+		"finishId":        req.FinishID,
+		"finishName":      req.FinishName,
+		"quantity":        req.Quantity,
+		"amount":          req.Amount,
+		"shippingName":    req.ShippingName,
+		"phone":           req.Phone,
+		"email":           req.Email,
+		"deliveryAddress": req.DeliveryAddress,
+		"city":            req.City,
+		"paymentRef":      req.PaymentRef,
+		"status":          "confirmed",
+		"createdAt":       time.Now().Format(time.RFC3339),
+	}
+
+	s.mu.Lock()
+	s.memoryOrders = append([]map[string]interface{}{orderItem}, s.memoryOrders...)
+	s.mu.Unlock()
+
 	if s.db != nil {
 		_, err := s.db.ExecContext(
 			r.Context(),
@@ -102,7 +123,6 @@ func (s *Service) HandleOrders(w http.ResponseWriter, r *http.Request) {
 		)
 		if err != nil {
 			log.Printf("orders: warning DB insert error: %v (falling back gracefully)", err)
-			// Fallback Exec without optional columns if schema not fully migrated yet
 			_, _ = s.db.ExecContext(r.Context(), `INSERT INTO orders (id, finish_id, finish_name, quantity, amount, delivery_address, status) VALUES ($1, $2, $3, $4, $5, $6, 'confirmed')`, orderID, req.FinishID, req.FinishName, req.Quantity, req.Amount, req.DeliveryAddress)
 		}
 	}
@@ -110,20 +130,7 @@ func (s *Service) HandleOrders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
 		"status":  "success",
 		"message": "Order created successfully",
-		"order": map[string]interface{}{
-			"id":           orderID,
-			"finishId":     req.FinishID,
-			"finishName":   req.FinishName,
-			"quantity":     req.Quantity,
-			"amount":       req.Amount,
-			"shippingName": req.ShippingName,
-			"phone":        req.Phone,
-			"email":        req.Email,
-			"city":         req.City,
-			"paymentRef":   req.PaymentRef,
-			"status":       "confirmed",
-			"createdAt":    time.Now().Format(time.RFC3339),
-		},
+		"order":   orderItem,
 	})
 }
 
@@ -386,5 +393,93 @@ func (s *Service) HandlePaystackWebhook(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// HandleListOrders handles GET /api/admin/orders and GET /api/orders
+func (s *Service) HandleListOrders(w http.ResponseWriter, r *http.Request) {
+	if s.db != nil {
+		rows, err := s.db.QueryContext(r.Context(), `SELECT id, finish_id, finish_name, quantity, amount, delivery_address, COALESCE(shipping_name, ''), COALESCE(phone, ''), COALESCE(email, ''), COALESCE(city, ''), COALESCE(payment_ref, ''), status, created_at FROM orders ORDER BY created_at DESC`)
+		if err == nil {
+			defer rows.Close()
+			var orders []map[string]interface{}
+			for rows.Next() {
+				var id, finishId, finishName, deliveryAddress, shippingName, phone, email, city, paymentRef, status string
+				var quantity, amount int
+				var createdAt time.Time
+				if err := rows.Scan(&id, &finishId, &finishName, &quantity, &amount, &deliveryAddress, &shippingName, &phone, &email, &city, &paymentRef, &status, &createdAt); err != nil {
+					log.Printf("orders scan error: %v", err)
+					continue
+				}
+
+				orders = append(orders, map[string]interface{}{
+					"id":              id,
+					"finishId":        finishId,
+					"finishName":      finishName,
+					"quantity":        quantity,
+					"amount":          amount,
+					"deliveryAddress": deliveryAddress,
+					"shippingName":    shippingName,
+					"phone":           phone,
+					"email":           email,
+					"city":            city,
+					"paymentRef":      paymentRef,
+					"status":          status,
+					"createdAt":       createdAt.Format(time.RFC3339),
+				})
+			}
+			if err := rows.Err(); err != nil {
+				log.Printf("orders query iteration error: %v", err)
+			}
+			if len(orders) > 0 {
+				writeJSON(w, http.StatusOK, map[string]interface{}{
+					"status": "success",
+					"data":   orders,
+					"orders": orders,
+				})
+				return
+			}
+		}
+	}
+
+
+	s.mu.RLock()
+	allOrders := make([]map[string]interface{}, len(s.memoryOrders))
+	copy(allOrders, s.memoryOrders)
+	s.mu.RUnlock()
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status": "success",
+		"data":   allOrders,
+		"orders": allOrders,
+	})
+}
+
+// HandleUpdateOrderStatus handles PATCH /api/admin/orders/{id}/status and PUT /api/admin/orders/{id}/status
+func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
+	orderID := r.PathValue("id")
+	if orderID == "" {
+		writeError(w, http.StatusBadRequest, "order id is required")
+		return
+	}
+
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Status == "" {
+		writeError(w, http.StatusBadRequest, "status is required")
+		return
+	}
+
+	if s.db != nil {
+		_, err := s.db.ExecContext(r.Context(), `UPDATE orders SET status = $1 WHERE id = $2`, req.Status, orderID)
+		if err != nil {
+			log.Printf("update order status error: %v", err)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "success",
+		"message": "Order status updated successfully",
+	})
 }
 
