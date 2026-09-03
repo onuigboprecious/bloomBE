@@ -177,10 +177,14 @@ func main() {
 	mux.HandleFunc("POST /api/analytics/tap", analyticsSvc.HandleRecordTap)
 	mux.HandleFunc("GET /api/analytics", analyticsSvc.HandleGetAnalytics)
 
-	// 8. VIP Waitlist & Orders
+	// 8. VIP Waitlist & Orders & Paystack Payment Stack
 	mux.HandleFunc("POST /api/waitlist", storeSvc.HandleWaitlist)
 	mux.HandleFunc("POST /api/orders", storeSvc.HandleOrders)
 	mux.HandleFunc("POST /api/paystack/initialize", storeSvc.HandleInitializePaystack)
+	mux.HandleFunc("GET /api/paystack/verify/{reference}", storeSvc.HandleVerifyPaystack)
+	mux.HandleFunc("GET /api/paystack/verify", storeSvc.HandleVerifyPaystack)
+	mux.HandleFunc("POST /api/paystack/webhook", storeSvc.HandlePaystackWebhook)
+	mux.HandleFunc("POST /webhooks/paystack", storeSvc.HandlePaystackWebhook)
 
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
 	handler := middleware.CORS(frontendOrigin, mux)

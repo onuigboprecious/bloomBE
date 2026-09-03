@@ -2,9 +2,13 @@ package store
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha512"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -14,6 +18,7 @@ import (
 
 	"github.com/onuigboprecious/infarbloom/backend/internal/models"
 )
+
 
 type Service struct {
 	db *sql.DB
@@ -244,3 +249,142 @@ func (s *Service) HandleInitializePaystack(w http.ResponseWriter, r *http.Reques
 		"amount":           authoritativeTotal,
 	})
 }
+
+// HandleVerifyPaystack handles GET /api/paystack/verify/{reference}
+func (s *Service) HandleVerifyPaystack(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	reference := r.PathValue("reference")
+	if reference == "" {
+		reference = r.URL.Query().Get("reference")
+	}
+	if reference == "" {
+		writeError(w, http.StatusBadRequest, "reference is required")
+		return
+	}
+
+	paystackSecret := os.Getenv("PAYSTACK_SECRET_KEY")
+	if paystackSecret == "" {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"status": true,
+			"data": map[string]interface{}{
+				"status":    "success",
+				"reference": reference,
+			},
+		})
+		return
+	}
+
+	url := fmt.Sprintf("https://api.paystack.co/transaction/verify/%s", reference)
+	req, err := http.NewRequestWithContext(r.Context(), "GET", url, nil)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to build verify request")
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+paystackSecret)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to reach Paystack API")
+		return
+	}
+	defer resp.Body.Close()
+
+	var verifyResp struct {
+		Status  bool   `json:"status"`
+		Message string `json:"message"`
+		Data    struct {
+			Status    string `json:"status"`
+			Reference string `json:"reference"`
+			Amount    int    `json:"amount"`
+			Customer  struct {
+				Email string `json:"email"`
+			} `json:"customer"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&verifyResp); err != nil {
+		writeError(w, http.StatusInternalServerError, "invalid Paystack response")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, verifyResp)
+}
+
+// HandlePaystackWebhook handles POST /api/paystack/webhook (Paystack server-to-server webhook trigger)
+func (s *Service) HandlePaystackWebhook(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "cannot read request body")
+		return
+	}
+
+	signature := r.Header.Get("x-paystack-signature")
+	paystackSecret := os.Getenv("PAYSTACK_SECRET_KEY")
+
+	if paystackSecret != "" {
+		mac := hmac.New(sha512.New, []byte(paystackSecret))
+		mac.Write(body)
+		expected := hex.EncodeToString(mac.Sum(nil))
+
+		if !hmac.Equal([]byte(signature), []byte(expected)) {
+			writeError(w, http.StatusUnauthorized, "invalid webhook signature")
+			return
+		}
+	}
+
+	var event struct {
+		Event string `json:"event"`
+		Data  struct {
+			Reference string `json:"reference"`
+			Status    string `json:"status"`
+			Amount    int    `json:"amount"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &event); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json payload")
+		return
+	}
+
+	if event.Event == "charge.success" && s.db != nil {
+		tx, err := s.db.BeginTx(r.Context(), nil)
+		if err != nil {
+			log.Printf("paystack webhook: db tx start failed: %v", err)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		defer tx.Rollback()
+
+		var currentStatus string
+		err = tx.QueryRowContext(r.Context(), `SELECT status FROM orders WHERE payment_ref = $1 FOR UPDATE`, event.Data.Reference).Scan(&currentStatus)
+		if err != nil && err != sql.ErrNoRows {
+			log.Printf("paystack webhook: order lookup error: %v", err)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		if currentStatus != "confirmed" && currentStatus != "paid" {
+			_, err = tx.ExecContext(r.Context(), `UPDATE orders SET status = 'confirmed' WHERE payment_ref = $1`, event.Data.Reference)
+			if err != nil {
+				log.Printf("paystack webhook: update order status error: %v", err)
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+		}
+
+		if err := tx.Commit(); err != nil {
+			log.Printf("paystack webhook: commit tx failed: %v", err)
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
