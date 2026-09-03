@@ -180,6 +180,7 @@ func main() {
 	// 8. VIP Waitlist & Orders
 	mux.HandleFunc("POST /api/waitlist", storeSvc.HandleWaitlist)
 	mux.HandleFunc("POST /api/orders", storeSvc.HandleOrders)
+	mux.HandleFunc("POST /api/paystack/initialize", storeSvc.HandleInitializePaystack)
 
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
 	handler := middleware.CORS(frontendOrigin, mux)

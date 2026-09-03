@@ -176,4 +176,9 @@ type OrderRequest struct {
 	Quantity        int    `json:"quantity"`
 	Amount          int    `json:"amount"`
 	DeliveryAddress string `json:"deliveryAddress"`
+	ShippingName    string `json:"shippingName,omitempty"`
+	Phone           string `json:"phone,omitempty"`
+	Email           string `json:"email,omitempty"`
+	City            string `json:"city,omitempty"`
+	PaymentRef      string `json:"paymentRef,omitempty"`
 }
