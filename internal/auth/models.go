@@ -29,11 +29,12 @@ type UserPublic struct {
 
 // Session represents an active authenticated user session.
 type Session struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"user_id"`
-	Token     string    `json:"token"`
-	ExpiresAt time.Time `json:"expires_at"`
-	CreatedAt time.Time `json:"created_at"`
+	ID             string    `json:"id"`
+	UserID         string    `json:"user_id"`
+	Token          string    `json:"token"`
+	ExpiresAt      time.Time `json:"expires_at"`
+	LastActivityAt time.Time `json:"last_activity_at"`
+	CreatedAt      time.Time `json:"created_at"`
 }
 
 // ToPublic converts a User to a UserPublic struct.

@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	sessionCookieName = "auth_session"
-	sessionDuration   = 24 * time.Hour
+	sessionCookieName     = "auth_session"
+	sessionDuration       = 24 * time.Hour
+	maxInactivityDuration = 30 * time.Minute
 )
 
 var (
@@ -65,12 +66,14 @@ func createSessionAndSetCookie(w http.ResponseWriter, userID string) (*Session, 
 		return nil, err
 	}
 
+	now := time.Now()
 	session := &Session{
-		ID:        token,
-		UserID:    userID,
-		Token:     token,
-		ExpiresAt: time.Now().Add(sessionDuration),
-		CreatedAt: time.Now(),
+		ID:             token,
+		UserID:         userID,
+		Token:          token,
+		ExpiresAt:      now.Add(sessionDuration),
+		LastActivityAt: now,
+		CreatedAt:      now,
 	}
 
 	// Persist session to PostgreSQL if DB is connected
@@ -145,20 +148,34 @@ func currentUser(r *http.Request) (*User, bool) {
 	}
 
 	// Fallback to in-memory store
-	mu.RLock()
+	now := time.Now()
+	mu.Lock()
 	session, exists := sessions[token]
 	if !exists {
-		mu.RUnlock()
+		mu.Unlock()
 		return nil, false
 	}
 
-	if time.Now().After(session.ExpiresAt) {
-		mu.RUnlock()
+	if now.After(session.ExpiresAt) {
+		delete(sessions, token)
+		mu.Unlock()
 		return nil, false
 	}
 
+	// Check sliding window inactivity
+	if session.LastActivityAt.IsZero() {
+		session.LastActivityAt = session.CreatedAt
+	}
+	if now.Sub(session.LastActivityAt) > maxInactivityDuration {
+		delete(sessions, token)
+		mu.Unlock()
+		return nil, false
+	}
+
+	// Update last activity timestamp on valid request
+	session.LastActivityAt = now
 	user, userExists := users[session.UserID]
-	mu.RUnlock()
+	mu.Unlock()
 
 	if !userExists {
 		return nil, false
