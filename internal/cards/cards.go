@@ -79,7 +79,7 @@ func (s *Service) seedDefaultCards() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	defaultUid := "BLM-9921-NFC"
+	defaultUid := "ENZ-9921-NFC"
 	sig := SignCardUID(defaultUid)
 	s.cards[defaultUid] = &NFCCard{
 		ID:         "card-demo-1",

@@ -60,7 +60,7 @@ func (s *Service) seedDefaultProfiles() {
 		Location: "Lagos & Abuja, Nigeria",
 		Theme:    "dark-luxe",
 		Layout:   "stack",
-		CardUid:  "BLM-9921-NFC",
+		CardUid:  "ENZ-9921-NFC",
 		Socials: map[string]interface{}{
 			"instagram": "precious.design",
 			"tiktok":    "@precious_creator",
@@ -79,8 +79,8 @@ func (s *Service) seedDefaultProfiles() {
 	}
 
 	s.profiles["precious"] = defaultProfile
-	s.cardToUser["BLM-9921-NFC"] = "precious"
-	s.userToCard["precious"] = "BLM-9921-NFC"
+	s.cardToUser["ENZ-9921-NFC"] = "precious"
+	s.userToCard["precious"] = "ENZ-9921-NFC"
 }
 
 // GetByUsername fetches public Bloom profile by @username or card_uid.
@@ -89,8 +89,8 @@ func (s *Service) GetByUsername(ctx context.Context, identifier string) (*models
 	identifier = strings.TrimSpace(strings.ToLower(identifier))
 
 	if s.db != nil {
-		// Check nfc_cards table if identifier matches card UID format (e.g., BLM-*)
-		if strings.HasPrefix(strings.ToUpper(identifier), "BLM-") {
+		// Check nfc_cards table if identifier matches card UID format (e.g., ENZ-* or BLM-*)
+		if strings.HasPrefix(strings.ToUpper(identifier), "ENZ-") || strings.HasPrefix(strings.ToUpper(identifier), "BLM-") {
 			var cardStatus string
 			var cardUserID sql.NullString
 			err := s.db.QueryRowContext(ctx, `SELECT status, user_id FROM nfc_cards WHERE LOWER(card_uid) = $1`, identifier).Scan(&cardStatus, &cardUserID)
@@ -237,7 +237,17 @@ func (s *Service) UpdateMyProfile(ctx context.Context, userID string, req models
 		if req.Username != nil && *req.Username != "" {
 			cleanUsername := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(*req.Username, "@")))
 			if cleanUsername != "" {
-				_, _ = s.db.ExecContext(ctx, `UPDATE users SET username = $1 WHERE id = $2`, cleanUsername, userID)
+				var currentUsername string
+				_ = s.db.QueryRowContext(ctx, `SELECT COALESCE(username, '') FROM users WHERE id = $1`, userID).Scan(&currentUsername)
+				if !strings.EqualFold(currentUsername, cleanUsername) {
+					if !s.IsUsernameAvailable(ctx, cleanUsername) {
+						return nil, ErrUsernameTaken
+					}
+					_, err := s.db.ExecContext(ctx, `UPDATE users SET username = $1 WHERE id = $2`, cleanUsername, userID)
+					if err != nil {
+						return nil, fmt.Errorf("username update failed: %w", err)
+					}
+				}
 			}
 		}
 

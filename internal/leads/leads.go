@@ -26,7 +26,7 @@ func New(db *sql.DB) *Service {
 		memory: []models.Lead{
 			{
 				ID:        "lead-1",
-				CardUid:   "BLM-9921-NFC",
+				CardUid:   "ENZ-9921-NFC",
 				Name:      "Amaka Adebayo",
 				Phone:     "+234 802 345 6789",
 				Email:     "amaka@paystack.com",
@@ -37,7 +37,7 @@ func New(db *sql.DB) *Service {
 			},
 			{
 				ID:        "lead-2",
-				CardUid:   "BLM-9921-NFC",
+				CardUid:   "ENZ-9921-NFC",
 				Name:      "Tunde Bakare",
 				Phone:     "+234 809 111 2233",
 				Email:     "tbakare@kudacapital.com",
@@ -82,7 +82,7 @@ func (s *Service) HandleCreateLead(w http.ResponseWriter, r *http.Request) {
 		req.Method = "NFC Tap"
 	}
 	if req.CardUid == "" {
-		req.CardUid = "BLM-9921-NFC"
+		req.CardUid = "ENZ-9921-NFC"
 	}
 
 	req.CreatedAt = time.Now()

@@ -189,6 +189,14 @@ func migrateSchema(db *sql.DB) error {
 		used BOOLEAN NOT NULL DEFAULT FALSE,
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
+	CREATE INDEX IF NOT EXISTS idx_password_resets_email ON password_resets(email);
+
+	-- Foreign key & query optimization indexes
+	CREATE INDEX IF NOT EXISTS idx_leads_user_id ON leads(user_id);
+	CREATE INDEX IF NOT EXISTS idx_taps_user_id ON taps(user_id);
+	CREATE INDEX IF NOT EXISTS idx_taps_card_uid ON taps(card_uid);
+	CREATE INDEX IF NOT EXISTS idx_nfc_cards_user_id ON nfc_cards(user_id);
+	CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
 	`
 
 	_, err := db.Exec(schema)

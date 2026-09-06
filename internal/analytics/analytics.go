@@ -49,7 +49,7 @@ func (s *Service) HandleRecordTap(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.CardUid == "" {
-		req.CardUid = "BLM-9921-NFC"
+		req.CardUid = "ENZ-9921-NFC"
 	}
 	if req.Method == "" {
 		req.Method = "NFC Tap"

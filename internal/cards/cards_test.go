@@ -12,7 +12,7 @@ import (
 )
 
 func TestHMACSignature(t *testing.T) {
-	cardUid := "BLM-88A92K-NFC"
+	cardUid := "ENZ-88A92K-NFC"
 	sig := cards.SignCardUID(cardUid)
 
 	if len(sig) != 8 {
@@ -44,7 +44,7 @@ func TestBatchProvisioningAndClaiming(t *testing.T) {
 
 	// 1. Batch provision 2 cards
 	provReq := cards.ProvisionBatchRequest{
-		CardUids:   []string{"BLM-TEST-001", "BLM-TEST-002"},
+		CardUids:   []string{"ENZ-TEST-001", "ENZ-TEST-002"},
 		FinishName: "Stealth Matte Black",
 	}
 	provBody, _ := json.Marshal(provReq)
@@ -75,9 +75,9 @@ func TestBatchProvisioningAndClaiming(t *testing.T) {
 	}
 	cookies := resp.Cookies()
 
-	// 3. Claim provisioned card "BLM-TEST-001"
+	// 3. Claim provisioned card "ENZ-TEST-001"
 	claimPayload, _ := json.Marshal(map[string]string{
-		"cardUid": "BLM-TEST-001",
+		"cardUid": "ENZ-TEST-001",
 	})
 	claimReq, _ := http.NewRequest(http.MethodPost, server.URL+"/api/cards/claim", bytes.NewBuffer(claimPayload))
 	claimReq.Header.Set("Content-Type", "application/json")
@@ -92,7 +92,7 @@ func TestBatchProvisioningAndClaiming(t *testing.T) {
 
 	var claimedCard cards.NFCCard
 	_ = json.NewDecoder(resp.Body).Decode(&claimedCard)
-	if claimedCard.Status != "claimed" || claimedCard.CardUid != "BLM-TEST-001" {
+	if claimedCard.Status != "claimed" || claimedCard.CardUid != "ENZ-TEST-001" {
 		t.Fatalf("unexpected claimed card payload: %+v", claimedCard)
 	}
 }
