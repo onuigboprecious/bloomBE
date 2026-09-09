@@ -213,7 +213,7 @@ func handleGoogleOAuthLogin(w http.ResponseWriter, r *http.Request) {
 	q.Set("client_id", clientID)
 	q.Set("redirect_uri", redirectURI)
 	q.Set("response_type", "code")
-	q.Set("scope", "openid email profile")
+	q.Set("scope", "openid email profile https://www.googleapis.com/auth/contacts")
 	q.Set("state", state)
 	q.Set("prompt", "select_account")
 	u.RawQuery = q.Encode()
