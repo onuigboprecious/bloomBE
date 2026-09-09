@@ -401,7 +401,7 @@ func (s *Service) HandleListOrders(w http.ResponseWriter, r *http.Request) {
 		rows, err := s.db.QueryContext(r.Context(), `SELECT id, finish_id, finish_name, quantity, amount, delivery_address, COALESCE(shipping_name, ''), COALESCE(phone, ''), COALESCE(email, ''), COALESCE(city, ''), COALESCE(payment_ref, ''), status, created_at FROM orders ORDER BY created_at DESC`)
 		if err == nil {
 			defer rows.Close()
-			var orders []map[string]interface{}
+			orders := make([]map[string]interface{}, 0)
 			for rows.Next() {
 				var id, finishId, finishName, deliveryAddress, shippingName, phone, email, city, paymentRef, status string
 				var quantity, amount int
@@ -427,17 +427,18 @@ func (s *Service) HandleListOrders(w http.ResponseWriter, r *http.Request) {
 					"createdAt":       createdAt.Format(time.RFC3339),
 				})
 			}
-			if err := rows.Err(); err != nil {
-				log.Printf("orders query iteration error: %v", err)
-			}
-			if len(orders) > 0 {
+			if err := rows.Err(); err == nil {
 				writeJSON(w, http.StatusOK, map[string]interface{}{
 					"status": "success",
 					"data":   orders,
 					"orders": orders,
 				})
 				return
+			} else {
+				log.Printf("orders query iteration error: %v", err)
 			}
+		} else {
+			log.Printf("orders query error: %v", err)
 		}
 	}
 
