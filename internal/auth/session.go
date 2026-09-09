@@ -33,7 +33,7 @@ func seedDemoUsers() {
 	demoUsers := []*User{
 		{
 			ID:           "usr_9921",
-			Email:        "precious@bloomlabs.africa",
+			Email:        "precious@enlazer.cloud",
 			Name:         "Precious Onuigbo",
 			Username:     "precious",
 			PasswordHash: "$2a$10$wN3d0Dq9yL0q/KzZ3U2/nO5g9z.Gv9Z6p.y3J.3X.7S7.6v5J5.", // demo bcrypt hash

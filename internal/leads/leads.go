@@ -89,11 +89,14 @@ func (s *Service) HandleCreateLead(w http.ResponseWriter, r *http.Request) {
 
 	if s.db != nil {
 		var userID sql.NullString
-		if req.CardUid != "" {
-			_ = s.db.QueryRowContext(r.Context(), `SELECT user_id FROM nfc_cards WHERE card_uid = $1 AND user_id IS NOT NULL`, req.CardUid).Scan(&userID)
+		if req.Username != "" {
+			_ = s.db.QueryRowContext(r.Context(), `SELECT id FROM users WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($1)`, req.Username).Scan(&userID)
 		}
-		if !userID.Valid || userID.String == "" {
-			_ = s.db.QueryRowContext(r.Context(), `SELECT user_id FROM profiles WHERE card_uid = $1 AND user_id IS NOT NULL`, req.CardUid).Scan(&userID)
+		if (!userID.Valid || userID.String == "") && req.CardUid != "" {
+			_ = s.db.QueryRowContext(r.Context(), `SELECT user_id FROM nfc_cards WHERE LOWER(card_uid) = LOWER($1) AND user_id IS NOT NULL`, req.CardUid).Scan(&userID)
+		}
+		if (!userID.Valid || userID.String == "") && req.CardUid != "" {
+			_ = s.db.QueryRowContext(r.Context(), `SELECT user_id FROM profiles WHERE (LOWER(card_uid) = LOWER($1) OR LOWER(handle) = LOWER($1)) AND user_id IS NOT NULL`, req.CardUid).Scan(&userID)
 		}
 		if !userID.Valid || userID.String == "" {
 			_ = s.db.QueryRowContext(r.Context(), `SELECT id FROM users ORDER BY created_at ASC LIMIT 1`).Scan(&userID)
@@ -142,22 +145,21 @@ func (s *Service) HandleGetLeads(w http.ResponseWriter, r *http.Request) {
 
 		if err == nil {
 			defer rows.Close()
-			var leadsList []models.Lead
+			leadsList := make([]models.Lead, 0)
 			for rows.Next() {
 				var l models.Lead
 				if err := rows.Scan(&l.ID, &l.CardUid, &l.Name, &l.Email, &l.Phone, &l.Role, &l.Method, &l.Notes, &l.CreatedAt); err == nil {
 					leadsList = append(leadsList, l)
 				}
 			}
-			if err := rows.Err(); err != nil {
-				writeError(w, http.StatusInternalServerError, "failed iterating leads: "+err.Error())
+			if err := rows.Err(); err == nil {
+				writeJSON(w, http.StatusOK, leadsList)
 				return
+			} else {
+				log.Printf("leads query iteration error: %v", err)
 			}
-			if leadsList == nil {
-				leadsList = []models.Lead{}
-			}
-			writeJSON(w, http.StatusOK, leadsList)
-			return
+		} else {
+			log.Printf("leads query error: %v", err)
 		}
 	}
 

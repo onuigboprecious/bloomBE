@@ -36,7 +36,7 @@ func (s *Service) seedDefaults() {
 	defer s.mu.Unlock()
 
 	s.links["demo-user-id"] = []models.CustomLink{
-		{ID: "lnk-1", UserID: "demo-user-id", Label: "My Design Portfolio", URL: "https://precious.design", Order: 1, CreatedAt: time.Now()},
+		{ID: "lnk-1", UserID: "demo-user-id", Label: "My Design Portfolio", URL: "https://enlazer.cloud/@precious", Order: 1, CreatedAt: time.Now()},
 		{ID: "lnk-2", UserID: "demo-user-id", Label: "Book 1-on-1 Consultation", URL: "https://calendly.com/precious-onuigbo/30min", Order: 2, CreatedAt: time.Now()},
 		{ID: "lnk-3", UserID: "demo-user-id", Label: "Watch YouTube Builds", URL: "https://youtube.com/@precious_builds", Order: 3, CreatedAt: time.Now()},
 	}

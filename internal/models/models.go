@@ -119,6 +119,7 @@ type Lead struct {
 	ID        string    `json:"id"`
 	UserID    string    `json:"userId,omitempty"`
 	CardUid   string    `json:"cardUid"`
+	Username  string    `json:"username,omitempty"`
 	Name      string    `json:"name"`
 	Email     string    `json:"email"`
 	Phone     string    `json:"phone"`
