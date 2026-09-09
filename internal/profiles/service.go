@@ -48,27 +48,27 @@ func (s *Service) seedDefaultProfiles() {
 	defer s.mu.Unlock()
 
 	defaultProfile := &models.BloomProfile{
-		Name:     "Precious Onuigbo",
-		Username: "precious",
-		Title:    "Product Designer & Creator",
-		Company:  "Enlazer Studio",
-		Bio:      "Designing digital experiences & building next-gen physical NFC profile cards across Nigeria. Tap to connect or download my vCard!",
-		Avatar:   "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80",
-		Email:    "precious@enlazer.cloud",
-		Phone:    "+234 803 123 4567",
-		Website:  "https://enlazer.cloud/@precious",
+		Name:     "Kelvin Uchechukwu",
+		Username: "kelvin",
+		Title:    "Product Designer & Tech Founder",
+		Company:  "Enlazer Labs",
+		Bio:      "Crafting intuitive digital products & high-impact physical NFC networking solutions across Africa.",
+		Avatar:   "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
+		Email:    "kelvin@enlazer.cloud",
+		Phone:    "+234 814 990 1234",
+		Website:  "https://enlazer.cloud/@kelvin",
 		Location: "Lagos & Abuja, Nigeria",
 		Theme:    "dark-luxe",
 		Layout:   "stack",
 		CardUid:  "ENZ-9921-NFC",
 		Socials: map[string]interface{}{
-			"instagram": "precious.design",
-			"tiktok":    "@precious_creator",
-			"twitter":   "preciousonuigbo",
-			"whatsapp":  "+2348031234567",
-			"calendly":  "https://calendly.com/precious-onuigbo/30min",
-			"linkedin":  "preciousonuigbo",
-			"portfolio": "https://enlazer.cloud/@precious",
+			"instagram": "kelvin.design",
+			"tiktok":    "@kelvin_tech",
+			"twitter":   "kelvin_uche",
+			"whatsapp":  "+2348149901234",
+			"calendly":  "https://calendly.com/kelvin-uche/30min",
+			"linkedin":  "kelvin-uchechukwu",
+			"portfolio": "https://enlazer.cloud/@kelvin",
 		},
 		Stats: models.ProfileStats{
 			TotalTaps:      1422,
@@ -78,8 +78,10 @@ func (s *Service) seedDefaultProfiles() {
 		},
 	}
 
+	s.profiles["kelvin"] = defaultProfile
 	s.profiles["precious"] = defaultProfile
-	s.cardToUser["ENZ-9921-NFC"] = "precious"
+	s.cardToUser["ENZ-9921-NFC"] = "kelvin"
+	s.userToCard["kelvin"] = "ENZ-9921-NFC"
 	s.userToCard["precious"] = "ENZ-9921-NFC"
 }
 
