@@ -235,7 +235,7 @@ func handleGoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
 	if frontendOrigin == "" {
-		frontendOrigin = "https://www.enlazer.com.ng"
+		frontendOrigin = "https://enlazer.cloud"
 	}
 	frontendOrigin = strings.TrimSuffix(frontendOrigin, "/")
 
