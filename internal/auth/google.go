@@ -213,7 +213,7 @@ func handleGoogleOAuthLogin(w http.ResponseWriter, r *http.Request) {
 	q.Set("client_id", clientID)
 	q.Set("redirect_uri", redirectURI)
 	q.Set("response_type", "code")
-	q.Set("scope", "openid email profile")
+	q.Set("scope", "openid email profile https://www.googleapis.com/auth/contacts")
 	q.Set("state", state)
 	q.Set("prompt", "select_account")
 	u.RawQuery = q.Encode()
@@ -283,8 +283,11 @@ func handleGoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Redirect back to frontend dashboard with session token
+	// Redirect back to frontend dashboard with session token and google access token
 	targetRedirect := fmt.Sprintf("%s/dashboard?token=%s", frontendOrigin, session.Token)
+	if tokenRes.AccessToken != "" {
+		targetRedirect += "&google_access_token=" + url.QueryEscape(tokenRes.AccessToken)
+	}
 	http.Redirect(w, r, targetRedirect, http.StatusTemporaryRedirect)
 }
 
