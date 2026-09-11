@@ -19,6 +19,7 @@ import (
 	"github.com/onuigboprecious/infarbloom/backend/internal/middleware"
 	"github.com/onuigboprecious/infarbloom/backend/internal/profiles"
 	"github.com/onuigboprecious/infarbloom/backend/internal/socials"
+	"github.com/onuigboprecious/infarbloom/backend/internal/storage"
 	"github.com/onuigboprecious/infarbloom/backend/internal/store"
 )
 
@@ -90,6 +91,7 @@ func main() {
 	linksHandler := links.NewHandler(linksSvc)
 	analyticsSvc := analytics.New(database)
 	storeSvc := store.New(database)
+	r2Svc := storage.NewR2ServiceFromEnv()
 
 	mux := http.NewServeMux()
 
@@ -134,6 +136,9 @@ func main() {
 	mux.HandleFunc("GET /api/profile", profilesHandler.HandleGetMyProfile)
 	mux.HandleFunc("PUT /api/profile/me", profilesHandler.HandleUpdateMyProfile)
 	mux.HandleFunc("PUT /api/profile", profilesHandler.HandleUpdateMyProfile)
+
+	// Image Upload Endpoint (Cloudflare R2 Storage)
+	mux.HandleFunc("POST /api/upload", r2Svc.HandleUpload)
 
 	// Enlazer Public Profile routes
 	mux.HandleFunc("GET /api/profile/public/{username}", profilesHandler.HandleGetProfile)
