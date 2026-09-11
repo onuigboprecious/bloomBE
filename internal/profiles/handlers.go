@@ -152,8 +152,12 @@ func (h *Handler) HandleCheckHandle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	username := r.URL.Query().Get("username")
-	available := h.svc.IsUsernameAvailable(r.Context(), username)
+	var userID string
+	if user, ok := auth.CurrentUserFromContext(r); ok && user != nil {
+		userID = user.ID
+	}
 
+	available := h.svc.IsUsernameAvailableEx(r.Context(), username, userID)
 	writeJSON(w, http.StatusOK, map[string]bool{"available": available})
 }
 

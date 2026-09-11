@@ -396,8 +396,12 @@ func (s *Service) UpdateMyProfile(ctx context.Context, userID string, req models
 
 // IsUsernameAvailable checks handle availability
 func (s *Service) IsUsernameAvailable(ctx context.Context, username string) bool {
-	username = strings.TrimPrefix(username, "@")
+	return s.IsUsernameAvailableEx(ctx, username, "")
+}
+
+func (s *Service) IsUsernameAvailableEx(ctx context.Context, username, currentUserID string) bool {
 	username = strings.TrimSpace(strings.ToLower(username))
+	username = strings.TrimPrefix(username, "@")
 
 	if username == "" {
 		return false
@@ -405,7 +409,11 @@ func (s *Service) IsUsernameAvailable(ctx context.Context, username string) bool
 
 	if s.db != nil {
 		var count int
-		_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE LOWER(username) = $1`, username).Scan(&count)
+		if currentUserID != "" {
+			_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE LOWER(username) = $1 AND id != $2`, username, currentUserID).Scan(&count)
+		} else {
+			_ = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE LOWER(username) = $1`, username).Scan(&count)
+		}
 		return count == 0
 	}
 
