@@ -10,4 +10,14 @@ services:
       - key: APP_ENV
         value: production
       - key: FRONTEND_ORIGIN
-        value: https://enlazer.cloud
+        value: https://enlazer.com.ng
+      - key: R2_ACCOUNT_ID
+        value: 4aa6acbaae801624488470399d0c3c37
+      - key: R2_ACCESS_KEY_ID
+        value: 0c3a21b6bc464a1d919b80c31e878013
+      - key: R2_SECRET_ACCESS_KEY
+        value: cf252b643885aea41c20c0e50a0185a1cc88516c21fd8f9bd0eb99e584fd0530
+      - key: R2_BUCKET_NAME
+        value: enlazer-media
+      - key: R2_PUBLIC_DOMAIN
+        value: https://media.enlazer.cloud
