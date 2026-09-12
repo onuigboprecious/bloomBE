@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -140,8 +141,117 @@ func (r *R2Service) UploadObject(ctx context.Context, objectKey string, fileData
 	return fmt.Sprintf("https://pub-%s.r2.dev/%s", r.AccountID, objectKey), nil
 }
 
-// HandleUpload process POST /api/upload multipart file uploads
+type R2ObjectItem struct {
+	Key  string `json:"key"`
+	URL  string `json:"url"`
+	Size int64  `json:"size"`
+}
+
+// ListObjects fetches uploaded media objects from Cloudflare R2 bucket
+func (r *R2Service) ListObjects(ctx context.Context, prefix string) ([]R2ObjectItem, error) {
+	if !r.IsConfigured() {
+		return nil, fmt.Errorf("Cloudflare R2 is not fully configured (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME required)")
+	}
+
+	now := time.Now().UTC()
+	amzDate := now.Format("20060102T150405Z")
+	dateStamp := now.Format("20060102")
+	region := "auto"
+	service := "s3"
+
+	host := fmt.Sprintf("%s.r2.cloudflarestorage.com", r.AccountID)
+	query := "list-type=2"
+	if prefix != "" {
+		query += "&prefix=" + strings.TrimPrefix(prefix, "/")
+	}
+
+	endpoint := fmt.Sprintf("https://%s/%s?%s", host, r.BucketName, query)
+
+	payloadHash := sha256Hex([]byte(""))
+	canonicalURI := "/" + r.BucketName
+	canonicalHeaders := fmt.Sprintf("host:%s\nx-amz-content-sha256:%s\nx-amz-date:%s\n", host, payloadHash, amzDate)
+	signedHeaders := "host;x-amz-content-sha256;x-amz-date"
+
+	canonicalRequest := fmt.Sprintf("GET\n%s\n%s\n%s\n%s\n%s", canonicalURI, query, canonicalHeaders, signedHeaders, payloadHash)
+
+	credentialScope := fmt.Sprintf("%s/%s/%s/aws4_request", dateStamp, region, service)
+	stringToSign := fmt.Sprintf("AWS4-HMAC-SHA256\n%s\n%s\n%s", amzDate, credentialScope, sha256Hex([]byte(canonicalRequest)))
+
+	kDate := hmacSHA256([]byte("AWS4"+r.SecretAccessKey), dateStamp)
+	kRegion := hmacSHA256(kDate, region)
+	kService := hmacSHA256(kRegion, service)
+	kSigning := hmacSHA256(kService, "aws4_request")
+
+	signature := hex.EncodeToString(hmacSHA256(kSigning, stringToSign))
+
+	authorization := fmt.Sprintf("AWS4-HMAC-SHA256 Credential=%s/%s, SignedHeaders=%s, Signature=%s",
+		r.AccessKeyID, credentialScope, signedHeaders, signature)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", authorization)
+	req.Header.Set("x-amz-content-sha256", payloadHash)
+	req.Header.Set("x-amz-date", amzDate)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var listRes struct {
+		Contents []struct {
+			Key  string `xml:"Key"`
+			Size int64  `xml:"Size"`
+		} `xml:"Contents"`
+	}
+
+	if err := xml.Unmarshal(bodyBytes, &listRes); err != nil {
+		return nil, err
+	}
+
+	var result []R2ObjectItem
+	for _, c := range listRes.Contents {
+		url := fmt.Sprintf("https://pub-%s.r2.dev/%s", r.AccountID, c.Key)
+		if r.PublicDomain != "" {
+			url = fmt.Sprintf("%s/%s", r.PublicDomain, c.Key)
+		}
+		result = append(result, R2ObjectItem{
+			Key:  c.Key,
+			URL:  url,
+			Size: c.Size,
+		})
+	}
+	return result, nil
+}
+
+// HandleUpload handles POST /api/upload multipart file uploads and GET /api/upload object listing
 func (r *R2Service) HandleUpload(w http.ResponseWriter, req *http.Request) {
+	if req.Method == http.MethodGet {
+		items, err := r.ListObjects(req.Context(), req.URL.Query().Get("folder"))
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if items == nil {
+			items = []R2ObjectItem{}
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"status": "success",
+			"count":  len(items),
+			"images": items,
+		})
+		return
+	}
+
 	if req.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return

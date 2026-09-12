@@ -138,6 +138,7 @@ func main() {
 	mux.HandleFunc("PUT /api/profile", profilesHandler.HandleUpdateMyProfile)
 
 	// Image Upload Endpoint (Cloudflare R2 Storage)
+	mux.HandleFunc("GET /api/upload", r2Svc.HandleUpload)
 	mux.HandleFunc("POST /api/upload", r2Svc.HandleUpload)
 
 	// Enlazer Public Profile routes
