@@ -46,11 +46,15 @@ func (h *Handler) HandleGetProfile(w http.ResponseWriter, r *http.Request) {
 		username = r.URL.Query().Get("username")
 	}
 	if username == "" {
-		path := strings.TrimPrefix(r.URL.Path, "/api/profile/")
+		path := r.URL.Path
+		path = strings.TrimPrefix(path, "/api/profile/public/")
+		path = strings.TrimPrefix(path, "/api/profile/card/")
+		path = strings.TrimPrefix(path, "/api/profile/")
 		if path != "" && path != "/api/profile" {
 			username = path
 		}
 	}
+	username = strings.TrimPrefix(username, "@")
 	if username == "" {
 		username = "precious"
 	}
