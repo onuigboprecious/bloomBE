@@ -144,9 +144,9 @@ func (s *Service) HandleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 
 	user, _ := auth.CurrentUserFromContext(r)
 
-	total := 1422
-	monthly := 482
-	leads := 348
+	total := 0
+	monthly := 0
+	leads := 0
 
 	if s.db != nil && user != nil {
 		_ = s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM taps WHERE user_id = $1`, user.ID).Scan(&total)
@@ -154,20 +154,16 @@ func (s *Service) HandleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 		_ = s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM leads WHERE user_id = $1`, user.ID).Scan(&leads)
 	}
 
-	if total == 0 {
-		total = 1422
-	}
-	if monthly == 0 {
-		monthly = 482
-	}
-	if leads == 0 {
-		leads = 348
-	}
-
-	uniqueVisitors := int(float64(total) * 0.78)
-	conversionRate := int((float64(leads) / float64(uniqueVisitors)) * 100)
-	if conversionRate == 0 || conversionRate > 100 {
-		conversionRate = 84
+	uniqueVisitors := 0
+	conversionRate := 0
+	if total > 0 {
+		uniqueVisitors = int(float64(total) * 0.78)
+		if uniqueVisitors > 0 {
+			conversionRate = int((float64(leads) / float64(uniqueVisitors)) * 100)
+			if conversionRate > 100 {
+				conversionRate = 100
+			}
+		}
 	}
 
 	resp := models.AnalyticsResponse{
@@ -176,19 +172,8 @@ func (s *Service) HandleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 		UniqueVisitors: uniqueVisitors,
 		LeadsCaptured:  leads,
 		ConversionRate: conversionRate,
-		HourlyTaps: []models.HourlyTap{
-			{Hour: "08:00 AM", Taps: 24},
-			{Hour: "10:00 AM", Taps: 68},
-			{Hour: "12:00 PM", Taps: 142},
-			{Hour: "02:00 PM", Taps: 198},
-			{Hour: "04:00 PM", Taps: 112},
-			{Hour: "06:00 PM", Taps: 85},
-		},
-		DeviceOS: []models.DeviceOSBreakdown{
-			{OS: "iOS", Percentage: 58},
-			{OS: "Android", Percentage: 38},
-			{OS: "Desktop", Percentage: 4},
-		},
+		HourlyTaps:     []models.HourlyTap{},
+		DeviceOS:       []models.DeviceOSBreakdown{},
 	}
 
 	writeJSON(w, http.StatusOK, resp)
