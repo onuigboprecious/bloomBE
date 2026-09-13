@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -121,8 +122,9 @@ func sendResendResetEmail(toEmail, resetURL string) {
 		return
 	}
 
+	fromEmail := getResendFromEmail()
 	payload := map[string]interface{}{
-		"from":    "Enlazer <onboarding@resend.dev>",
+		"from":    fromEmail,
 		"to":      []string{toEmail},
 		"subject": "Reset Your Enlazer Password",
 		"html": fmt.Sprintf(`
@@ -160,7 +162,13 @@ func sendResendResetEmail(toEmail, resetURL string) {
 	}
 	defer resp.Body.Close()
 
-	log.Printf("auth: Resend email sent to %s (Status: %d)", toEmail, resp.StatusCode)
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		log.Printf("auth: ERROR - Resend password reset email rejected for %s (Status: %d, Response: %s)", toEmail, resp.StatusCode, string(respBody))
+		return
+	}
+
+	log.Printf("auth: Resend password reset email sent successfully to %s (Status: %d)", toEmail, resp.StatusCode)
 }
 
 // HandleResetPassword handles POST /api/auth/reset-password

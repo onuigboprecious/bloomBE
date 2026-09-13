@@ -78,8 +78,8 @@ func createSessionAndSetCookie(w http.ResponseWriter, userID string) (*Session, 
 
 	// Persist session to PostgreSQL if DB is connected
 	if activeService != nil && activeService.db != nil {
-		query := `INSERT INTO sessions (id, user_id, token, expires_at, created_at) VALUES ($1, $2, $3, $4, $5)`
-		if _, err := activeService.db.Exec(query, session.ID, session.UserID, session.Token, session.ExpiresAt, session.CreatedAt); err != nil {
+		query := `INSERT INTO sessions (id, user_id, token, expires_at, last_activity_at, created_at) VALUES ($1, $2, $3, $4, $5, $6)`
+		if _, err := activeService.db.Exec(query, session.ID, session.UserID, session.Token, session.ExpiresAt, session.LastActivityAt, session.CreatedAt); err != nil {
 			return nil, err
 		}
 	}
@@ -130,21 +130,29 @@ func currentUser(r *http.Request) (*User, bool) {
 	}
 	token = strings.TrimSpace(token)
 
-	// If DB is available, query DB for active session
+	// If DB is available, query DB for active session (enforcing maxInactivityDuration)
 	if activeService != nil && activeService.db != nil {
+		now := time.Now()
+		cutoff := now.Add(-maxInactivityDuration)
 		query := `
 		SELECT u.id, u.email, u.name, COALESCE(u.username, ''), COALESCE(u.password_hash, ''), COALESCE(u.google_id, ''), COALESCE(u.avatar_url, ''), u.is_pro, u.created_at, u.updated_at
 		FROM sessions s
 		JOIN users u ON s.user_id = u.id
-		WHERE s.token = $1 AND s.expires_at > $2
+		WHERE s.token = $1 AND s.expires_at > $2 AND s.last_activity_at > $3
 		`
 		var u User
-		err := activeService.db.QueryRow(query, token, time.Now()).Scan(
+		err := activeService.db.QueryRow(query, token, now, cutoff).Scan(
 			&u.ID, &u.Email, &u.Name, &u.Username, &u.PasswordHash, &u.GoogleID, &u.AvatarURL, &u.IsPro, &u.CreatedAt, &u.UpdatedAt,
 		)
 		if err == nil {
+			go func(t string) {
+				_, _ = activeService.db.Exec(`UPDATE sessions SET last_activity_at = NOW() WHERE token = $1`, t)
+			}(token)
 			return &u, true
 		}
+		go func(t string) {
+			_, _ = activeService.db.Exec(`DELETE FROM sessions WHERE token = $1 AND (expires_at <= NOW() OR last_activity_at <= NOW() - INTERVAL '30 minutes')`, t)
+		}(token)
 	}
 
 	// Fallback to in-memory store

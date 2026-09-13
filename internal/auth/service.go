@@ -58,8 +58,11 @@ func (s *Service) initSchema() error {
 		user_id VARCHAR(64) NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		token VARCHAR(128) UNIQUE NOT NULL,
 		expires_at TIMESTAMPTZ NOT NULL,
+		last_activity_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 	);
+
+	ALTER TABLE sessions ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 
 	CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 	CREATE UNIQUE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id) WHERE google_id IS NOT NULL;

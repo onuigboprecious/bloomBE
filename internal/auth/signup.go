@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -13,6 +14,17 @@ import (
 	"strings"
 	"time"
 )
+
+// getResendFromEmail resolves the Resend sender address from RESEND_FROM, FROM_EMAIL, or defaults to fallback.
+func getResendFromEmail() string {
+	if from := os.Getenv("RESEND_FROM"); from != "" {
+		return from
+	}
+	if from := os.Getenv("FROM_EMAIL"); from != "" {
+		return from
+	}
+	return "Enlazer <onboarding@resend.dev>"
+}
 
 type signupRequest struct {
 	Email    string `json:"email"`
@@ -122,10 +134,7 @@ func sendResendWelcomeEmail(toEmail, userName, username string) {
 	profileURL := fmt.Sprintf("%s/@%s", frontendOrigin, username)
 	dashboardURL := fmt.Sprintf("%s/dashboard", frontendOrigin)
 
-	fromEmail := os.Getenv("RESEND_FROM")
-	if fromEmail == "" {
-		fromEmail = "Enlazer <onboarding@resend.dev>"
-	}
+	fromEmail := getResendFromEmail()
 	subject := fmt.Sprintf("Welcome to Enlazer, %s! Your Digital Card is Ready", userName)
 	htmlContent := buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL)
 
@@ -158,7 +167,13 @@ func sendResendWelcomeEmail(toEmail, userName, username string) {
 	}
 	defer resp.Body.Close()
 
-	log.Printf("auth: Resend welcome email sent to %s (Status: %d)", toEmail, resp.StatusCode)
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		log.Printf("auth: ERROR - Resend welcome email rejected for %s (Status: %d, Response: %s)", toEmail, resp.StatusCode, string(respBody))
+		return
+	}
+
+	log.Printf("auth: Resend welcome email sent successfully to %s (Status: %d)", toEmail, resp.StatusCode)
 }
 
 // buildWelcomeEmailHTML constructs a responsive, modern HTML welcome email body with card linking & tapping instructions.
