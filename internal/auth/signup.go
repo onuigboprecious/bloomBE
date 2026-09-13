@@ -23,7 +23,7 @@ func getResendFromEmail() string {
 	if from := os.Getenv("FROM_EMAIL"); from != "" {
 		return from
 	}
-	return "Enlazer <onboarding@resend.dev>"
+	return "Enlazer <onboarding@enlazer.cloud>"
 }
 
 type signupRequest struct {
