@@ -96,18 +96,13 @@ func handleSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := createSessionAndSetCookie(w, newUser.ID)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to create session")
-		return
-	}
-
 	// Asynchronously dispatch Welcome Email via Resend
 	go sendResendWelcomeEmail(newUser.Email, newUser.Name, newUser.Username)
 
 	pub := newUser.ToPublic()
 	_ = writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"token":     session.Token,
+		"status":    "success",
+		"message":   "Account created successfully. Please check your email to proceed.",
 		"id":        pub.ID,
 		"name":      pub.Name,
 		"email":     pub.Email,
@@ -116,7 +111,6 @@ func handleSignup(w http.ResponseWriter, r *http.Request) {
 		"user":      pub,
 	})
 }
-
 
 // sendResendWelcomeEmail sends a welcome email to newly registered users via Resend.
 func sendResendWelcomeEmail(toEmail, userName, username string) {
@@ -200,7 +194,7 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
                 enlazer<span style="color: #00BCFF;">.</span>
               </div>
               <div style="color: #94A3B8; font-size: 13px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase;">
-                Digital Business Cards & Instant NFC Sharing
+                Digital cards & Instant NFC Sharing
               </div>
             </td>
           </tr>
@@ -335,5 +329,5 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
     </tr>
   </table>
 </body>
-</html>`, userName, username, profileURL, profileURL, dashboardURL, dashboardURL, currentYear)
+</html>`, userName, username, profileURL, profileURL, profileURL, dashboardURL, currentYear)
 }

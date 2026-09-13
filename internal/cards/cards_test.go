@@ -35,6 +35,7 @@ func TestBatchProvisioningAndClaiming(t *testing.T) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/auth/signup", authSvc.HandleSignup)
+	mux.HandleFunc("POST /api/auth/login", authSvc.HandleLogin)
 	mux.HandleFunc("POST /api/admin/cards/provision", handler.HandleBatchProvision)
 	mux.HandleFunc("POST /api/cards/claim", handler.HandleClaimCard)
 
@@ -63,7 +64,7 @@ func TestBatchProvisioningAndClaiming(t *testing.T) {
 		t.Fatalf("expected signature and signedUrl in card response, got %+v", provRes.Cards[0])
 	}
 
-	// 2. Signup user to get session cookie
+	// 2. Signup & Login user to get session cookie
 	signupBody, _ := json.Marshal(map[string]string{
 		"email":    "cardclaimer@example.com",
 		"password": "Password123!",
@@ -72,6 +73,15 @@ func TestBatchProvisioningAndClaiming(t *testing.T) {
 	resp, err = client.Post(server.URL+"/api/auth/signup", "application/json", bytes.NewBuffer(signupBody))
 	if err != nil || resp.StatusCode != http.StatusCreated {
 		t.Fatalf("signup failed: %v, status: %d", err, resp.StatusCode)
+	}
+
+	loginBody, _ := json.Marshal(map[string]string{
+		"email":    "cardclaimer@example.com",
+		"password": "Password123!",
+	})
+	resp, err = client.Post(server.URL+"/api/auth/login", "application/json", bytes.NewBuffer(loginBody))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("login failed: %v, status: %d", err, resp.StatusCode)
 	}
 	cookies := resp.Cookies()
 

@@ -30,13 +30,22 @@ func TestAuthFlow(t *testing.T) {
 		t.Fatalf("expected status 201, got %d", resp.StatusCode)
 	}
 
-	// Extract session cookie from signup response
-	cookies := resp.Cookies()
-	if len(cookies) == 0 {
-		t.Fatalf("expected session cookie on signup")
+	// 2. Login to obtain session cookie
+	loginBody, _ := json.Marshal(loginRequest{
+		Email:    "newuser@example.com",
+		Password: "password123",
+	})
+	resp, err = client.Post(server.URL+"/api/auth/login", "application/json", bytes.NewBuffer(loginBody))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("login failed: %v, status: %d", err, resp.StatusCode)
 	}
 
-	// 2. Fetch /api/auth/me with session cookie
+	cookies := resp.Cookies()
+	if len(cookies) == 0 {
+		t.Fatalf("expected session cookie on login")
+	}
+
+	// 3. Fetch /api/auth/me with session cookie
 	req, _ := http.NewRequest(http.MethodGet, server.URL+"/api/auth/me", nil)
 	for _, c := range cookies {
 		req.AddCookie(c)
@@ -71,11 +80,12 @@ func TestAuthFlow(t *testing.T) {
 	}
 
 	// 4. Login
-	loginBody, _ := json.Marshal(loginRequest{
-		Email:    "newuser@example.com",
-		Password: "password123",
-	})
-	resp, err = client.Post(server.URL+"/api/auth/login", "application/json", bytes.NewBuffer(loginBody))
+	loginMap := map[string]string{
+		"email":    "newuser@example.com",
+		"password": "password123",
+	}
+	loginBodyBytes, _ := json.Marshal(loginMap)
+	resp, err = client.Post(server.URL+"/api/auth/login", "application/json", bytes.NewBuffer(loginBodyBytes))
 	if err != nil {
 		t.Fatalf("login request failed: %v", err)
 	}
