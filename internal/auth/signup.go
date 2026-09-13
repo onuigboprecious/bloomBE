@@ -335,5 +335,5 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
     </tr>
   </table>
 </body>
-</html>`, userName, username, profileURL, profileURL, profileURL, dashboardURL, currentYear)
+</html>`, userName, username, profileURL, profileURL, dashboardURL, dashboardURL, currentYear)
 }
