@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/onuigboprecious/infarbloom/backend/internal/auth"
 )
 
 type R2Service struct {
@@ -149,6 +151,75 @@ func (r *R2Service) UploadObject(ctx context.Context, objectKey string, fileData
 
 	// 7. Return Public URL
 	return r.getPublicURL(objectKey), nil
+}
+
+// DeleteObject deletes an object from Cloudflare R2 bucket
+func (r *R2Service) DeleteObject(ctx context.Context, objectKey string) error {
+	if !r.IsConfigured() {
+		return fmt.Errorf("Cloudflare R2 is not configured")
+	}
+
+	objectKey = strings.TrimPrefix(objectKey, "/")
+	if objectKey == "" {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	amzDate := now.Format("20060102T150405Z")
+	dateStamp := now.Format("20060102")
+	region := "auto"
+	service := "s3"
+
+	host := fmt.Sprintf("%s.r2.cloudflarestorage.com", r.AccountID)
+	endpoint := fmt.Sprintf("https://%s/%s/%s", host, r.BucketName, objectKey)
+
+	payloadHash := sha256Hex([]byte(""))
+
+	canonicalURI := fmt.Sprintf("/%s/%s", r.BucketName, objectKey)
+	canonicalQueryString := ""
+	canonicalHeaders := fmt.Sprintf("host:%s\nx-amz-content-sha256:%s\nx-amz-date:%s\n",
+		host, payloadHash, amzDate)
+	signedHeaders := "host;x-amz-content-sha256;x-amz-date"
+
+	canonicalRequest := fmt.Sprintf("DELETE\n%s\n%s\n%s\n%s\n%s",
+		canonicalURI, canonicalQueryString, canonicalHeaders, signedHeaders, payloadHash)
+
+	credentialScope := fmt.Sprintf("%s/%s/%s/aws4_request", dateStamp, region, service)
+	stringToSign := fmt.Sprintf("AWS4-HMAC-SHA256\n%s\n%s\n%s",
+		amzDate, credentialScope, sha256Hex([]byte(canonicalRequest)))
+
+	kDate := hmacSHA256([]byte("AWS4"+r.SecretAccessKey), dateStamp)
+	kRegion := hmacSHA256(kDate, region)
+	kService := hmacSHA256(kRegion, service)
+	kSigning := hmacSHA256(kService, "aws4_request")
+
+	signature := hex.EncodeToString(hmacSHA256(kSigning, stringToSign))
+
+	authorization := fmt.Sprintf("AWS4-HMAC-SHA256 Credential=%s/%s, SignedHeaders=%s, Signature=%s",
+		r.AccessKeyID, credentialScope, signedHeaders, signature)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, endpoint, nil)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Authorization", authorization)
+	req.Header.Set("x-amz-content-sha256", payloadHash)
+	req.Header.Set("x-amz-date", amzDate)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 && resp.StatusCode != http.StatusNotFound {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("R2 delete returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
 }
 
 func (r *R2Service) getPublicURL(objectKey string) string {
@@ -306,7 +377,22 @@ func (r *R2Service) HandleUpload(w http.ResponseWriter, req *http.Request) {
 	}
 	folder = strings.Trim(folder, "/")
 
-	objectKey := fmt.Sprintf("%s/img_%d%s", folder, time.Now().UnixNano(), ext)
+	user, _ := auth.CurrentUserFromContext(req)
+
+	var objectKey string
+	if user != nil && user.ID != "" && folder == "avatars" {
+		extensions := []string{".jpg", ".jpeg", ".png", ".webp", ".gif"}
+		for _, e := range extensions {
+			if e != ext {
+				oldKey := fmt.Sprintf("avatars/user_%s%s", user.ID, e)
+				_ = r.DeleteObject(req.Context(), oldKey)
+			}
+		}
+		objectKey = fmt.Sprintf("avatars/user_%s%s", user.ID, ext)
+	} else {
+		objectKey = fmt.Sprintf("%s/img_%d%s", folder, time.Now().UnixNano(), ext)
+	}
+
 	contentType := header.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = http.DetectContentType(fileBytes)
