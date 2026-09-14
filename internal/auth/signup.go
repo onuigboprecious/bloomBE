@@ -313,10 +313,10 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
           <tr>
             <td style="background-color: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 28px 40px; text-align: center;">
               <p style="font-size: 12px; color: #94A3B8; margin: 0 0 12px 0; line-height: 1.5;">
-                Need help getting started? Reply directly to this email or visit your <a href="%s" style="color: #00BCFF; text-decoration: none; font-weight: 600;">Dashboard</a>.
+                Need help getting started? We are a mail away <a href="mailto:support@enlazer.com.ng" style="color: #00BCFF; text-decoration: none; font-weight: 600;">support@enlazer.com.ng</a>
               </p>
               <p style="font-size: 12px; color: #CBD5E1; margin: 0;">
-                © %d Enlazar Technologies Ltd. All rights reserved.
+                © %d Enlazar - IaaS. All rights reserved.
               </p>
             </td>
           </tr>
@@ -326,5 +326,5 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
     </tr>
   </table>
 </body>
-</html>`, userName, username, profileURL, profileURL, dashboardURL, dashboardURL, currentYear)
+</html>`, userName, username, profileURL, profileURL, dashboardURL, currentYear)
 }
