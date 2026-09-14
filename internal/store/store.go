@@ -478,6 +478,16 @@ func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request
 		}
 	}
 
+	s.mu.Lock()
+	for i, o := range s.memoryOrders {
+		if fmt.Sprintf("%v", o["id"]) == orderID {
+			s.memoryOrders[i]["status"] = req.Status
+			s.memoryOrders[i]["fulfillment_status"] = req.Status
+			break
+		}
+	}
+	s.mu.Unlock()
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":  "success",
 		"message": "Order status updated successfully",
