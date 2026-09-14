@@ -200,6 +200,7 @@ func (s *Service) HandleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 					totalOsTaps += cnt
 				}
 			}
+			_ = rows.Err()
 			rows.Close()
 			for _, item := range list {
 				pct := 0
@@ -236,6 +237,7 @@ func (s *Service) HandleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 					totalLocTaps += cnt
 				}
 			}
+			_ = locRows.Err()
 			locRows.Close()
 			for _, item := range list {
 				pct := 0

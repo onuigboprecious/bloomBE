@@ -136,11 +136,18 @@ func (r *R2Service) UploadObject(ctx context.Context, objectKey string, fileData
 	}
 
 	// 7. Return Public URL
-	if r.PublicDomain != "" {
-		return fmt.Sprintf("%s/%s", r.PublicDomain, objectKey), nil
-	}
+	return r.getPublicURL(objectKey), nil
+}
 
-	return fmt.Sprintf("https://pub-%s.r2.dev/%s", r.AccountID, objectKey), nil
+func (r *R2Service) getPublicURL(objectKey string) string {
+	objectKey = strings.TrimPrefix(objectKey, "/")
+	if r.PublicDomain != "" {
+		domain := strings.TrimPrefix(r.PublicDomain, "https://")
+		domain = strings.TrimPrefix(domain, "http://")
+		domain = strings.TrimSuffix(domain, "/")
+		return fmt.Sprintf("https://%s/%s", domain, objectKey)
+	}
+	return fmt.Sprintf("https://pub-%s.r2.dev/%s", r.AccountID, objectKey)
 }
 
 type R2ObjectItem struct {
@@ -222,10 +229,7 @@ func (r *R2Service) ListObjects(ctx context.Context, prefix string) ([]R2ObjectI
 
 	var result []R2ObjectItem
 	for _, c := range listRes.Contents {
-		url := fmt.Sprintf("https://pub-%s.r2.dev/%s", r.AccountID, c.Key)
-		if r.PublicDomain != "" {
-			url = fmt.Sprintf("%s/%s", r.PublicDomain, c.Key)
-		}
+		url := r.getPublicURL(c.Key)
 		result = append(result, R2ObjectItem{
 			Key:  c.Key,
 			URL:  url,
