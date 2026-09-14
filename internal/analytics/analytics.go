@@ -144,36 +144,135 @@ func (s *Service) HandleGetAnalytics(w http.ResponseWriter, r *http.Request) {
 
 	user, _ := auth.CurrentUserFromContext(r)
 
-	total := 0
-	monthly := 0
-	leads := 0
-
-	if s.db != nil && user != nil {
-		_ = s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM taps WHERE user_id = $1`, user.ID).Scan(&total)
-		_ = s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM taps WHERE user_id = $1 AND tapped_at > NOW() - INTERVAL '30 days'`, user.ID).Scan(&monthly)
-		_ = s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM leads WHERE user_id = $1`, user.ID).Scan(&leads)
+	timeframe := strings.TrimSpace(r.URL.Query().Get("timeframe"))
+	var intervalSql string
+	switch timeframe {
+	case "24h", "24 hours", "1d":
+		timeframe = "24h"
+		intervalSql = "24 hours"
+	case "7d", "7 days":
+		timeframe = "7d"
+		intervalSql = "7 days"
+	default:
+		timeframe = "30d"
+		intervalSql = "30 days"
 	}
 
+	total := 0
+	periodTaps := 0
+	leads := 0
 	uniqueVisitors := 0
-	conversionRate := 0
-	if total > 0 {
-		uniqueVisitors = int(float64(total) * 0.78)
-		if uniqueVisitors > 0 {
-			conversionRate = int((float64(leads) / float64(uniqueVisitors)) * 100)
-			if conversionRate > 100 {
-				conversionRate = 100
+	deviceOS := []models.DeviceOSBreakdown{}
+	locations := []models.LocationBreakdown{}
+
+	if s.db != nil && user != nil {
+		// 1. Lifetime Total Taps
+		_ = s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM taps WHERE user_id = $1`, user.ID).Scan(&total)
+
+		// 2. Period Taps based on selected timeframe
+		_ = s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM taps WHERE user_id = $1 AND tapped_at >= NOW() - $2::interval`, user.ID, intervalSql).Scan(&periodTaps)
+
+		// 3. Leads Captured within timeframe
+		_ = s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM leads WHERE user_id = $1 AND created_at >= NOW() - $2::interval`, user.ID, intervalSql).Scan(&leads)
+
+		// 4. Unique Visitors within timeframe from tap_analytics
+		_ = s.db.QueryRowContext(r.Context(), `SELECT COUNT(DISTINCT ip_address) FROM tap_analytics WHERE user_id = $1 AND timestamp >= NOW() - $2::interval`, user.ID, intervalSql).Scan(&uniqueVisitors)
+
+		// 5. Device OS distribution
+		rows, err := s.db.QueryContext(r.Context(), `
+			SELECT device_os, COUNT(*) 
+			FROM tap_analytics 
+			WHERE user_id = $1 AND timestamp >= NOW() - $2::interval 
+			GROUP BY device_os
+		`, user.ID, intervalSql)
+		if err == nil {
+			var totalOsTaps int
+			type osCount struct {
+				os  string
+				cnt int
+			}
+			var list []osCount
+			for rows.Next() {
+				var osName string
+				var cnt int
+				if err := rows.Scan(&osName, &cnt); err == nil && osName != "" {
+					list = append(list, osCount{os: osName, cnt: cnt})
+					totalOsTaps += cnt
+				}
+			}
+			rows.Close()
+			for _, item := range list {
+				pct := 0
+				if totalOsTaps > 0 {
+					pct = int((float64(item.cnt) / float64(totalOsTaps)) * 100)
+				}
+				deviceOS = append(deviceOS, models.DeviceOSBreakdown{
+					OS:         item.os,
+					Percentage: pct,
+					Taps:       item.cnt,
+				})
+			}
+		}
+
+		// 6. Geographic Location distribution
+		locRows, err := s.db.QueryContext(r.Context(), `
+			SELECT location, COUNT(*) 
+			FROM tap_analytics 
+			WHERE user_id = $1 AND timestamp >= NOW() - $2::interval 
+			GROUP BY location
+		`, user.ID, intervalSql)
+		if err == nil {
+			var totalLocTaps int
+			type locCount struct {
+				loc string
+				cnt int
+			}
+			var list []locCount
+			for locRows.Next() {
+				var locName string
+				var cnt int
+				if err := locRows.Scan(&locName, &cnt); err == nil && locName != "" {
+					list = append(list, locCount{loc: locName, cnt: cnt})
+					totalLocTaps += cnt
+				}
+			}
+			locRows.Close()
+			for _, item := range list {
+				pct := 0
+				if totalLocTaps > 0 {
+					pct = int((float64(item.cnt) / float64(totalLocTaps)) * 100)
+				}
+				locations = append(locations, models.LocationBreakdown{
+					Location:   item.loc,
+					Percentage: pct,
+					Taps:       item.cnt,
+				})
 			}
 		}
 	}
 
+	if periodTaps > 0 && uniqueVisitors == 0 {
+		uniqueVisitors = periodTaps
+	}
+
+	conversionRate := 0
+	if uniqueVisitors > 0 && leads > 0 {
+		conversionRate = int((float64(leads) / float64(uniqueVisitors)) * 100)
+		if conversionRate > 100 {
+			conversionRate = 100
+		}
+	}
+
 	resp := models.AnalyticsResponse{
+		Timeframe:      timeframe,
 		TotalTaps:      total,
-		MonthlyTaps:    monthly,
+		MonthlyTaps:    periodTaps,
 		UniqueVisitors: uniqueVisitors,
 		LeadsCaptured:  leads,
 		ConversionRate: conversionRate,
 		HourlyTaps:     []models.HourlyTap{},
-		DeviceOS:       []models.DeviceOSBreakdown{},
+		DeviceOS:       deviceOS,
+		Locations:      locations,
 	}
 
 	writeJSON(w, http.StatusOK, resp)

@@ -149,10 +149,19 @@ type HourlyTap struct {
 type DeviceOSBreakdown struct {
 	OS         string `json:"os"`
 	Percentage int    `json:"percentage"`
+	Taps       int    `json:"taps,omitempty"`
+}
+
+// LocationBreakdown represents percentage breakdown by geographic location
+type LocationBreakdown struct {
+	Location   string `json:"location"`
+	Percentage int    `json:"percentage"`
+	Taps       int    `json:"taps,omitempty"`
 }
 
 // AnalyticsResponse matches GET /api/analytics response
 type AnalyticsResponse struct {
+	Timeframe      string              `json:"timeframe,omitempty"`
 	TotalTaps      int                 `json:"totalTaps"`
 	MonthlyTaps    int                 `json:"monthlyTaps"`
 	UniqueVisitors int                 `json:"uniqueVisitors"`
@@ -160,6 +169,7 @@ type AnalyticsResponse struct {
 	ConversionRate int                 `json:"conversionRate"`
 	HourlyTaps     []HourlyTap         `json:"hourlyTaps"`
 	DeviceOS       []DeviceOSBreakdown `json:"deviceOs,omitempty"`
+	Locations      []LocationBreakdown `json:"locations,omitempty"`
 }
 
 // WaitlistRequest is the payload for POST /api/waitlist

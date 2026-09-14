@@ -213,11 +213,8 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
               <table role="presentation" width="100%%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px; margin-bottom: 28px;">
                 <tr>
                   <td style="padding: 24px;">
-                    <div style="font-size: 11px; font-weight: 700; color: #0284C7; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px;">
-                      Your Unique Profile Link & Handle
-                    </div>
-                    <div style="font-size: 18px; font-weight: 800; color: #0F172A; margin-bottom: 8px;">
-                      @%s
+                    <div style="font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 8px;">
+                      Your Unique Profile Link & Handle: <span style="color: #00BCFF; font-weight: 800;">@%s</span>
                     </div>
                     <div style="font-size: 13px; color: #64748B; word-break: break-all;">
                       <a href="%s" style="color: #00BCFF; text-decoration: none; font-weight: 600;">%s</a>
@@ -329,5 +326,5 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
     </tr>
   </table>
 </body>
-</html>`, userName, username, profileURL, profileURL, profileURL, dashboardURL, currentYear)
+</html>`, userName, username, profileURL, profileURL, dashboardURL, dashboardURL, currentYear)
 }
