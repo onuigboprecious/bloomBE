@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
@@ -28,15 +27,28 @@ type R2Service struct {
 }
 
 func NewR2ServiceFromEnv() *R2Service {
-	accountID := os.Getenv("R2_ACCOUNT_ID")
-	accessKeyID := os.Getenv("R2_ACCESS_KEY_ID")
-	secretAccessKey := os.Getenv("R2_SECRET_ACCESS_KEY")
-	bucketName := os.Getenv("R2_BUCKET_NAME")
-	publicDomain := os.Getenv("R2_PUBLIC_DOMAIN")
+	accountID := strings.TrimSpace(os.Getenv("R2_ACCOUNT_ID"))
+	accessKeyID := strings.TrimSpace(os.Getenv("R2_ACCESS_KEY_ID"))
+	secretAccessKey := strings.TrimSpace(os.Getenv("R2_SECRET_ACCESS_KEY"))
+	bucketName := strings.TrimSpace(os.Getenv("R2_BUCKET_NAME"))
+	publicDomain := strings.TrimSpace(os.Getenv("R2_PUBLIC_DOMAIN"))
 
-	if publicDomain != "" {
-		publicDomain = strings.TrimSuffix(publicDomain, "/")
+	if accountID == "" {
+		accountID = "4aa6acbaae801624488470399d0c3c37"
 	}
+	if accessKeyID == "" {
+		accessKeyID = "0c3a21b6bc464a1d919b80c31e878013"
+	}
+	if secretAccessKey == "" {
+		secretAccessKey = "cf252b643885aea41c20c0e50a0185a1cc88516c21fd8f9bd0eb99e584fd0530"
+	}
+	if bucketName == "" {
+		bucketName = "enlazer-media"
+	}
+	if publicDomain == "" {
+		publicDomain = "https://media.enlazer.cloud"
+	}
+	publicDomain = strings.TrimSuffix(publicDomain, "/")
 
 	return &R2Service{
 		AccountID:       accountID,
@@ -300,26 +312,17 @@ func (r *R2Service) HandleUpload(w http.ResponseWriter, req *http.Request) {
 		contentType = http.DetectContentType(fileBytes)
 	}
 
-	if r.IsConfigured() {
-		publicURL, err := r.UploadObject(req.Context(), objectKey, fileBytes, contentType)
-		if err == nil {
-			writeJSON(w, http.StatusOK, map[string]interface{}{
-				"status": "success",
-				"url":    publicURL,
-				"key":    objectKey,
-			})
-			return
-		}
-		log.Printf("storage: r2 upload failed, falling back to data URL: %v", err)
+	publicURL, err := r.UploadObject(req.Context(), objectKey, fileBytes, contentType)
+	if err != nil {
+		log.Printf("storage: ERROR - R2 UploadObject failed for key %s: %v", objectKey, err)
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to upload file to Cloudflare R2: %v", err))
+		return
 	}
 
-	// Seamless fallback if R2 credentials are not set on backend host
-	base64Data := base64.StdEncoding.EncodeToString(fileBytes)
-	dataURL := fmt.Sprintf("data:%s;base64,%s", contentType, base64Data)
-
+	log.Printf("storage: SUCCESS - Uploaded file to Cloudflare R2: %s -> %s", objectKey, publicURL)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status": "success",
-		"url":    dataURL,
+		"url":    publicURL,
 		"key":    objectKey,
 	})
 }
