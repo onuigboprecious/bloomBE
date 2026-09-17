@@ -80,6 +80,7 @@ func main() {
 		log.Printf("sentry.Init error: %s\n", err)
 	} else {
 		log.Println("Sentry SDK initialized successfully!")
+		sentry.CaptureMessage("It works!")
 		defer sentry.Flush(2 * time.Second)
 	}
 
