@@ -1,0 +1,24 @@
+# Cloudflare Tunnel Configuration (cloudflared)
+# Documentation: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/
+
+# 1. Tunnel UUID (Obtained after running `cloudflared tunnel create <tunnel-name>`)
+# tunnel: <YOUR_TUNNEL_UUID>
+# credentials-file: /root/.cloudflared/<YOUR_TUNNEL_UUID>.json
+
+# 2. Ingress Rules mapping public domains to local backend service
+ingress:
+  # Route traffic for backend API domain directly to local Go backend
+  - hostname: api.enlazer.com.ng
+    service: http://localhost:8080
+    originRequest:
+      connectTimeout: 30s
+      noTLSVerify: false
+
+  # Optional admin subdomain
+  - hostname: admin.enlazer.com.ng
+    service: http://localhost:8080
+    originRequest:
+      connectTimeout: 30s
+
+  # Fallback catch-all rule (returns HTTP 404 for unmapped hostnames)
+  - service: http_status:404

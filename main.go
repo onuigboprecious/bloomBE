@@ -184,12 +184,12 @@ func main() {
 	mux.HandleFunc("POST /api/cards/activate", cardsHandler.HandleActivateCard)
 	mux.HandleFunc("GET /api/cards/me", cardsHandler.HandleGetMyCards)
 
-	// Admin Tag CRUD Endpoints
-	mux.HandleFunc("POST /api/admin/cards", cardsHandler.HandleCreateCard)
-	mux.HandleFunc("GET /api/admin/cards", cardsHandler.HandleListCards)
-	mux.HandleFunc("PUT /api/admin/cards/{cardUid}", cardsHandler.HandleUpdateCard)
-	mux.HandleFunc("DELETE /api/admin/cards/{cardUid}", cardsHandler.HandleDeleteCard)
-	mux.HandleFunc("POST /api/admin/cards/provision", cardsHandler.HandleBatchProvision)
+	// Admin Tag CRUD Endpoints (Protected by Cloudflare Access Zero-Trust)
+	mux.HandleFunc("POST /api/admin/cards", middleware.CloudflareAccessProtection(cardsHandler.HandleCreateCard))
+	mux.HandleFunc("GET /api/admin/cards", middleware.CloudflareAccessProtection(cardsHandler.HandleListCards))
+	mux.HandleFunc("PUT /api/admin/cards/{cardUid}", middleware.CloudflareAccessProtection(cardsHandler.HandleUpdateCard))
+	mux.HandleFunc("DELETE /api/admin/cards/{cardUid}", middleware.CloudflareAccessProtection(cardsHandler.HandleDeleteCard))
+	mux.HandleFunc("POST /api/admin/cards/provision", middleware.CloudflareAccessProtection(cardsHandler.HandleBatchProvision))
 
 	// vCard downloads
 	mux.HandleFunc("GET /api/vcard/", profilesHandler.HandleGetVCard)
@@ -206,13 +206,13 @@ func main() {
 	mux.HandleFunc("GET /api/analytics", analyticsSvc.HandleGetAnalytics)
 
 	// 8. Support Tickets, Orders & Paystack Payment Stack
-	mux.HandleFunc("POST /api/support", storeSvc.HandleSupportTicket)
-	mux.HandleFunc("POST /api/contact", storeSvc.HandleSupportTicket)
+	mux.HandleFunc("POST /api/support", middleware.TurnstileProtection(storeSvc.HandleSupportTicket))
+	mux.HandleFunc("POST /api/contact", middleware.TurnstileProtection(storeSvc.HandleSupportTicket))
 	mux.HandleFunc("POST /api/orders", storeSvc.HandleOrders)
 	mux.HandleFunc("GET /api/orders", storeSvc.HandleListOrders)
-	mux.HandleFunc("GET /api/admin/orders", storeSvc.HandleListOrders)
-	mux.HandleFunc("PATCH /api/admin/orders/{id}/status", storeSvc.HandleUpdateOrderStatus)
-	mux.HandleFunc("PUT /api/admin/orders/{id}/status", storeSvc.HandleUpdateOrderStatus)
+	mux.HandleFunc("GET /api/admin/orders", middleware.CloudflareAccessProtection(storeSvc.HandleListOrders))
+	mux.HandleFunc("PATCH /api/admin/orders/{id}/status", middleware.CloudflareAccessProtection(storeSvc.HandleUpdateOrderStatus))
+	mux.HandleFunc("PUT /api/admin/orders/{id}/status", middleware.CloudflareAccessProtection(storeSvc.HandleUpdateOrderStatus))
 	mux.HandleFunc("POST /api/paystack/initialize", storeSvc.HandleInitializePaystack)
 	mux.HandleFunc("GET /api/paystack/verify/{reference}", storeSvc.HandleVerifyPaystack)
 	mux.HandleFunc("GET /api/paystack/verify", storeSvc.HandleVerifyPaystack)
