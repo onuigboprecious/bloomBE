@@ -19,9 +19,8 @@ type TurnstileResponse struct {
 // VerifyTurnstileToken checks a Cloudflare Turnstile token against siteverify API.
 func VerifyTurnstileToken(token string, remoteIP string) bool {
 	secretKey := os.Getenv("CLOUDFLARE_TURNSTILE_SECRET_KEY")
-	if secretKey == "" {
-		// If Turnstile secret key is not set in environment, allow in development/testing mode
-		log.Println("Notice: CLOUDFLARE_TURNSTILE_SECRET_KEY is not set. Bypassing Turnstile verification.")
+	if secretKey == "" || secretKey == "1x0000000000000000000000000000000AA" {
+		// If Turnstile secret key is unset or set to Cloudflare testing key, bypass siteverify in local dev
 		return true
 	}
 
