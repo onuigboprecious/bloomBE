@@ -183,8 +183,9 @@ func main() {
 	mux.HandleFunc("POST /api/analytics/tap", analyticsSvc.HandleRecordTap)
 	mux.HandleFunc("GET /api/analytics", analyticsSvc.HandleGetAnalytics)
 
-	// 8. VIP Waitlist & Orders & Paystack Payment Stack
-	mux.HandleFunc("POST /api/waitlist", storeSvc.HandleWaitlist)
+	// 8. Support Tickets, Orders & Paystack Payment Stack
+	mux.HandleFunc("POST /api/support", storeSvc.HandleSupportTicket)
+	mux.HandleFunc("POST /api/contact", storeSvc.HandleSupportTicket)
 	mux.HandleFunc("POST /api/orders", storeSvc.HandleOrders)
 	mux.HandleFunc("GET /api/orders", storeSvc.HandleListOrders)
 	mux.HandleFunc("GET /api/admin/orders", storeSvc.HandleListOrders)

@@ -172,13 +172,7 @@ type AnalyticsResponse struct {
 	Locations      []LocationBreakdown `json:"locations,omitempty"`
 }
 
-// WaitlistRequest is the payload for POST /api/waitlist
-type WaitlistRequest struct {
-	Name            string `json:"name"`
-	Email           string `json:"email"`
-	Phone           string `json:"phone"`
-	PreferredFinish string `json:"preferredFinish"`
-}
+
 
 // OrderRequest is the payload for POST /api/orders
 type OrderRequest struct {

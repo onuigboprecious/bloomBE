@@ -40,41 +40,7 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
 
-// HandleWaitlist handles POST /api/waitlist
-func (s *Service) HandleWaitlist(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
 
-	var req models.WaitlistRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request payload")
-		return
-	}
-
-	if req.Name == "" || req.Email == "" {
-		writeError(w, http.StatusBadRequest, "name and email are required")
-		return
-	}
-
-	if req.PreferredFinish == "" {
-		req.PreferredFinish = "Stealth Matte Black"
-	}
-
-	if s.db != nil {
-		_, err := s.db.ExecContext(r.Context(), `INSERT INTO waitlist (name, email, phone, preferred_finish) VALUES ($1, $2, $3, $4)`, req.Name, req.Email, req.Phone, req.PreferredFinish)
-		if err != nil {
-			log.Printf("waitlist: warning DB insert error: %v", err)
-		}
-	}
-
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"status":  "success",
-		"message": "Successfully joined the Bloom VIP waitlist",
-		"data":    req,
-	})
-}
 
 // HandleOrders handles POST /api/orders
 func (s *Service) HandleOrders(w http.ResponseWriter, r *http.Request) {
@@ -493,4 +459,49 @@ func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request
 		"message": "Order status updated successfully",
 	})
 }
+
+// HandleSupportTicket handles POST /api/support and POST /api/contact
+func (s *Service) HandleSupportTicket(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req struct {
+		Name    string `json:"name"`
+		Email   string `json:"email"`
+		Subject string `json:"subject"`
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request payload")
+		return
+	}
+
+	if req.Name == "" || req.Email == "" || req.Message == "" {
+		writeError(w, http.StatusBadRequest, "name, email, and message are required")
+		return
+	}
+
+	ticketID := fmt.Sprintf("tkt-%d", time.Now().UnixNano())
+
+	if s.db != nil {
+		_, err := s.db.ExecContext(r.Context(),
+			`INSERT INTO support_tickets (id, name, email, subject, message, status) VALUES ($1, $2, $3, $4, $5, 'open')`,
+			ticketID, req.Name, req.Email, req.Subject, req.Message,
+		)
+		if err != nil {
+			log.Printf("support ticket: db insert warning: %v", err)
+		}
+	}
+
+	log.Printf("Support ticket created: ID=%s, Name=%s, Email=%s, Subject=%s", ticketID, req.Name, req.Email, req.Subject)
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"status":   "success",
+		"message":  "Support ticket created successfully",
+		"ticketId": ticketID,
+	})
+}
+
 
