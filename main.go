@@ -7,7 +7,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/getsentry/sentry-go"
+	sentryhttp "github.com/getsentry/sentry-go/http"
 	_ "github.com/lib/pq"
 
 	"github.com/onuigboprecious/infarbloom/backend/internal/analytics"
@@ -60,6 +63,24 @@ func main() {
 	env := os.Getenv("APP_ENV")
 	if env == "" {
 		env = "development"
+	}
+
+	// Initialize Sentry for error tracking & performance monitoring
+	sentryDSN := os.Getenv("SENTRY_DSN")
+	if sentryDSN == "" {
+		sentryDSN = "https://8cdd8cbb0047991729f7b5129f53c263@o4512098984853504.ingest.us.sentry.io/4512099005038592"
+	}
+
+	if err := sentry.Init(sentry.ClientOptions{
+		Dsn:              sentryDSN,
+		Debug:            true,
+		TracesSampleRate: 1.0,
+		Environment:      env,
+	}); err != nil {
+		log.Printf("sentry.Init error: %s\n", err)
+	} else {
+		log.Println("Sentry SDK initialized successfully!")
+		defer sentry.Flush(2 * time.Second)
 	}
 
 	dbURL := os.Getenv("DATABASE_URL")
@@ -199,6 +220,12 @@ func main() {
 
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
 	handler := middleware.CORS(frontendOrigin, mux)
+
+	// Wrap handler with Sentry middleware for HTTP tracing and panic recovery
+	sentryHandler := sentryhttp.New(sentryhttp.Options{
+		Repanic: true,
+	})
+	handler = sentryHandler.Handle(handler)
 
 	port := os.Getenv("PORT")
 	if port == "" {
