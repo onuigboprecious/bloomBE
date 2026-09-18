@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/onuigboprecious/infarbloom/backend/internal/models"
 )
@@ -111,7 +112,7 @@ func (s *Service) GetByUsername(ctx context.Context, identifier string) (*models
 		SELECT u.name, COALESCE(u.username, ''), COALESCE(p.title, ''), COALESCE(p.company, ''),
 		       COALESCE(p.bio, ''), COALESCE(p.avatar, ''), u.email, COALESCE(p.phone, ''),
 		       COALESCE(p.website, ''), COALESCE(p.location, ''), COALESCE(p.theme, 'dark-luxe'),
-		       COALESCE(p.layout, 'stack'), COALESCE(p.card_uid, ''), COALESCE(p.socials_json, '{}'::jsonb), u.id
+		       COALESCE(p.layout, 'stack'), COALESCE(p.card_uid, ''), COALESCE(p.socials_json, '{}'::jsonb), u.id, u.username_changed_at
 		FROM users u
 		LEFT JOIN profiles p ON p.user_id = u.id
 		WHERE LOWER(u.username) = $1 
@@ -123,16 +124,24 @@ func (s *Service) GetByUsername(ctx context.Context, identifier string) (*models
 		var p models.BloomProfile
 		var userID string
 		var socialsRaw []byte
+		var usernameChangedAt sql.NullTime
 		err := s.db.QueryRowContext(ctx, query, identifier).Scan(
 			&p.Name, &p.Username, &p.Title, &p.Company, &p.Bio, &p.Avatar,
 			&p.Email, &p.Phone, &p.Website, &p.Location, &p.Theme, &p.Layout,
-			&p.CardUid, &socialsRaw, &userID,
+			&p.CardUid, &socialsRaw, &userID, &usernameChangedAt,
 		)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return s.getFallbackProfile(identifier)
 			}
 			return nil, err
+		}
+
+		if usernameChangedAt.Valid && !usernameChangedAt.Time.IsZero() {
+			t := usernameChangedAt.Time
+			p.UsernameChangedAt = &t
+			canChange := t.Add(7 * 24 * time.Hour)
+			p.CanChangeUsernameAt = &canChange
 		}
 
 		if len(socialsRaw) > 0 {
@@ -235,17 +244,36 @@ func (s *Service) UpdateMyProfile(ctx context.Context, userID string, req models
 			_, _ = s.db.ExecContext(ctx, `UPDATE users SET name = $1 WHERE id = $2`, *req.Name, userID)
 		}
 
-		// Update username handle if provided
+		// Update username handle if provided (Enforce 7-day cooldown)
 		if req.Username != nil && *req.Username != "" {
 			cleanUsername := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(*req.Username, "@")))
 			if cleanUsername != "" {
 				var currentUsername string
-				_ = s.db.QueryRowContext(ctx, `SELECT COALESCE(username, '') FROM users WHERE id = $1`, userID).Scan(&currentUsername)
+				var usernameChangedAt sql.NullTime
+				_ = s.db.QueryRowContext(ctx, `SELECT COALESCE(username, ''), username_changed_at FROM users WHERE id = $1`, userID).Scan(&currentUsername, &usernameChangedAt)
 				if !strings.EqualFold(currentUsername, cleanUsername) {
+					// Enforce 7-day cooldown rule
+					if usernameChangedAt.Valid && !usernameChangedAt.Time.IsZero() {
+						elapsed := time.Since(usernameChangedAt.Time)
+						cooldown := 7 * 24 * time.Hour
+						if elapsed < cooldown {
+							remaining := cooldown - elapsed
+							days := int(remaining.Hours() / 24)
+							hours := int(remaining.Hours()) % 24
+							var timeStr string
+							if days > 0 {
+								timeStr = fmt.Sprintf("%d day(s) and %d hour(s)", days, hours)
+							} else {
+								timeStr = fmt.Sprintf("%d hour(s)", hours)
+							}
+							return nil, fmt.Errorf("Username can only be changed once every 7 days. Please wait %s before changing it again.", timeStr)
+						}
+					}
+
 					if !s.IsUsernameAvailable(ctx, cleanUsername) {
 						return nil, ErrUsernameTaken
 					}
-					_, err := s.db.ExecContext(ctx, `UPDATE users SET username = $1 WHERE id = $2`, cleanUsername, userID)
+					_, err := s.db.ExecContext(ctx, `UPDATE users SET username = $1, username_changed_at = NOW() WHERE id = $2`, cleanUsername, userID)
 					if err != nil {
 						return nil, fmt.Errorf("username update failed: %w", err)
 					}

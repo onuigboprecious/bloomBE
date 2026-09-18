@@ -65,8 +65,10 @@ type BloomProfile struct {
 	CardUid     string                 `json:"cardUid"`
 	Socials     map[string]interface{} `json:"socials"`
 	SocialList  []SocialHandle         `json:"socialHandles,omitempty"`
-	CustomLinks []CustomLink           `json:"customLinks,omitempty"`
-	Stats       ProfileStats           `json:"stats"`
+	CustomLinks         []CustomLink           `json:"customLinks,omitempty"`
+	Stats               ProfileStats           `json:"stats"`
+	UsernameChangedAt   *time.Time             `json:"usernameChangedAt,omitempty"`
+	CanChangeUsernameAt *time.Time             `json:"canChangeUsernameAt,omitempty"`
 }
 
 // UpdateBloomProfileRequest is the payload for PUT /api/profile/me and PUT /api/profile

@@ -67,6 +67,7 @@ func migrateSchema(db *sql.DB) error {
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS location VARCHAR(255) DEFAULT '';
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar TEXT DEFAULT '';
 	ALTER TABLE users ADD COLUMN IF NOT EXISTS theme VARCHAR(50) DEFAULT 'obsidian';
+	ALTER TABLE users ADD COLUMN IF NOT EXISTS username_changed_at TIMESTAMPTZ;
 
 	CREATE TABLE IF NOT EXISTS profiles (
 		id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
