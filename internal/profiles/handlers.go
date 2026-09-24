@@ -186,6 +186,14 @@ func (h *Handler) HandleClaimCard(w http.ResponseWriter, r *http.Request) {
 
 	profile, err := h.svc.ClaimCard(r.Context(), user.ID, req.CardUid)
 	if err != nil {
+		if errors.Is(err, ErrUnregisteredCard) {
+			writeError(w, http.StatusNotFound, "card ID has not been provisioned or is invalid")
+			return
+		}
+		if errors.Is(err, ErrCardAlreadyClaimed) {
+			writeError(w, http.StatusConflict, "this card has already been claimed by another user")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

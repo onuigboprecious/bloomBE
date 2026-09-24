@@ -105,4 +105,19 @@ func TestBatchProvisioningAndClaiming(t *testing.T) {
 	if claimedCard.Status != "claimed" || claimedCard.CardUid != "ENZ-TEST-001" {
 		t.Fatalf("unexpected claimed card payload: %+v", claimedCard)
 	}
+
+	// 4. Attempt to claim an unprovisioned card -> expect 404 StatusNotFound
+	unprovPayload, _ := json.Marshal(map[string]string{
+		"cardUid": "ENZ-UNPROVISIONED-CARD",
+	})
+	unprovReq, _ := http.NewRequest(http.MethodPost, server.URL+"/api/cards/claim", bytes.NewBuffer(unprovPayload))
+	unprovReq.Header.Set("Content-Type", "application/json")
+	for _, c := range cookies {
+		unprovReq.AddCookie(c)
+	}
+
+	resp, err = client.Do(unprovReq)
+	if err != nil || resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 StatusNotFound when claiming unprovisioned card, got status %d", resp.StatusCode)
+	}
 }

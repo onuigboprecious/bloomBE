@@ -458,11 +458,20 @@ func (s *Service) ClaimCard(ctx context.Context, userID, cardUid string) (*model
 	}
 
 	if s.db != nil {
-		_, err := s.db.ExecContext(ctx, `
-		INSERT INTO nfc_cards (card_uid, user_id, status)
-		VALUES ($1, $2, 'claimed')
-		ON CONFLICT (card_uid) DO UPDATE SET user_id = $2, status = 'claimed'
-		`, cardUid, userID)
+		var status string
+		var existingUserID sql.NullString
+		err := s.db.QueryRowContext(ctx, `SELECT status, user_id FROM nfc_cards WHERE card_uid = $1`, cardUid).Scan(&status, &existingUserID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, ErrUnregisteredCard
+			}
+			return nil, err
+		}
+		if status == "claimed" && existingUserID.Valid && existingUserID.String != userID {
+			return nil, ErrCardAlreadyClaimed
+		}
+
+		_, err = s.db.ExecContext(ctx, `UPDATE nfc_cards SET user_id = $1, status = 'claimed' WHERE card_uid = $2`, userID, cardUid)
 		if err != nil {
 			return nil, err
 		}
@@ -481,11 +490,17 @@ func (s *Service) ClaimCard(ctx context.Context, userID, cardUid string) (*model
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if _, exists := s.cardToUser[cardUid]; !exists && cardUid != "ENZ-9921-NFC" {
+		return nil, ErrUnregisteredCard
+	}
 	s.cardToUser[cardUid] = "precious"
 	p := s.profiles["precious"]
-	p.CardUid = cardUid
-	res := *p
-	return &res, nil
+	if p != nil {
+		p.CardUid = cardUid
+		res := *p
+		return &res, nil
+	}
+	return nil, ErrProfileNotFound
 }
 
 // GenerateVCard generates vCard 3.0 content string for phonebook saving

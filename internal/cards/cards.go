@@ -416,19 +416,16 @@ func (s *Service) ClaimCard(ctx context.Context, userID, cardUid string) (*NFCCa
 		err := s.db.QueryRowContext(ctx, `SELECT status, user_id FROM nfc_cards WHERE card_uid = $1`, cardUid).Scan(&status, &existingUserID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
-				// Auto-provision if cardUid does not exist yet
-				_, _ = s.db.ExecContext(ctx, `INSERT INTO nfc_cards (card_uid, user_id, status) VALUES ($1, $2, 'claimed')`, cardUid, userID)
-			} else {
-				return nil, err
+				return nil, ErrCardNotFound
 			}
-		} else {
-			if status == "claimed" && existingUserID.Valid && existingUserID.String != userID {
-				return nil, ErrCardAlreadyClaimed
-			}
-			_, err = s.db.ExecContext(ctx, `UPDATE nfc_cards SET user_id = $1, status = 'claimed' WHERE card_uid = $2`, userID, cardUid)
-			if err != nil {
-				return nil, err
-			}
+			return nil, err
+		}
+		if status == "claimed" && existingUserID.Valid && existingUserID.String != userID {
+			return nil, ErrCardAlreadyClaimed
+		}
+		_, err = s.db.ExecContext(ctx, `UPDATE nfc_cards SET user_id = $1, status = 'claimed', activated_at = COALESCE(activated_at, NOW()) WHERE card_uid = $2`, userID, cardUid)
+		if err != nil {
+			return nil, err
 		}
 
 		// Update profile table link
@@ -456,14 +453,9 @@ func (s *Service) ClaimCard(ctx context.Context, userID, cardUid string) (*NFCCa
 
 	c, exists := s.cards[cardUid]
 	if !exists {
-		c = &NFCCard{
-			ID:         fmt.Sprintf("card-%d", time.Now().UnixNano()),
-			CardUid:    cardUid,
-			FinishName: "Stealth Matte Black",
-			CreatedAt:  time.Now(),
-		}
-		s.cards[cardUid] = c
-	} else if c.Status == "claimed" && c.UserID != nil && *c.UserID != userID {
+		return nil, ErrCardNotFound
+	}
+	if c.Status == "claimed" && c.UserID != nil && *c.UserID != userID {
 		return nil, ErrCardAlreadyClaimed
 	}
 
@@ -744,6 +736,10 @@ func (h *Handler) HandleClaimCard(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrCardAlreadyClaimed) {
 			writeError(w, http.StatusConflict, "this card has already been claimed by another user")
+			return
+		}
+		if errors.Is(err, ErrCardNotFound) {
+			writeError(w, http.StatusNotFound, "card ID has not been provisioned or is invalid")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, err.Error())
