@@ -37,10 +37,10 @@ func TestBloomProfileFlow(t *testing.T) {
 
 	client := server.Client()
 
-	// 1. GET /api/profile/kelvin -> returns default profile 200 OK
-	resp, err := client.Get(server.URL + "/api/profile/kelvin")
+	// 1. GET /api/profile/user -> returns default profile 200 OK
+	resp, err := client.Get(server.URL + "/api/profile/user")
 	if err != nil || resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 OK for kelvin profile, got %d, err: %v", resp.StatusCode, err)
+		t.Fatalf("expected 200 OK for user profile, got %d, err: %v", resp.StatusCode, err)
 	}
 
 	var p models.BloomProfile
@@ -49,8 +49,8 @@ func TestBloomProfileFlow(t *testing.T) {
 		t.Fatalf("unexpected profile payload: %+v", p)
 	}
 
-	// 2. GET /api/vcard/kelvin -> returns .vcf content
-	resp, err = client.Get(server.URL + "/api/vcard/kelvin")
+	// 2. GET /api/vcard/user -> returns .vcf content
+	resp, err = client.Get(server.URL + "/api/vcard/user")
 	if err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 OK for vcard, got %d", resp.StatusCode)
 	}
@@ -58,8 +58,8 @@ func TestBloomProfileFlow(t *testing.T) {
 		t.Fatalf("expected Content-Type text/vcard, got %s", contentType)
 	}
 
-	// 3. GET /api/profile/check-handle?username=kelvin -> false (taken)
-	resp, err = client.Get(server.URL + "/api/profile/check-handle?username=kelvin")
+	// 3. GET /api/profile/check-handle?username=user -> false (taken)
+	resp, err = client.Get(server.URL + "/api/profile/check-handle?username=user")
 	if err != nil || resp.StatusCode != http.StatusOK {
 		t.Fatalf("check handle failed: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestBloomProfileFlow(t *testing.T) {
 	var handleRes map[string]bool
 	_ = json.NewDecoder(resp.Body).Decode(&handleRes)
 	if handleRes["available"] != false {
-		t.Fatalf("expected handle 'kelvin' to be unavailable, got %+v", handleRes)
+		t.Fatalf("expected handle 'user' to be unavailable, got %+v", handleRes)
 	}
 
 	// 4. PUT /api/profile/me without auth -> 401

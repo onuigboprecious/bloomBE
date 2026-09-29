@@ -186,23 +186,27 @@ func handleGoogleAuth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// getGoogleRedirectURI returns configured GOOGLE_REDIRECT_URI or constructs default from FRONTEND_ORIGIN / API domain.
+func getGoogleRedirectURI() string {
+	if redirectURI := os.Getenv("GOOGLE_REDIRECT_URI"); redirectURI != "" {
+		return redirectURI
+	}
+	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
+	if frontendOrigin != "" {
+		return strings.TrimSuffix(frontendOrigin, "/") + "/api/auth/google/callback"
+	}
+	return "https://api.enlazer.cloud/api/auth/google/callback"
+}
+
 // handleGoogleOAuthLogin initiates the Google OAuth authorization code redirect flow.
 func handleGoogleOAuthLogin(w http.ResponseWriter, r *http.Request) {
 	clientID := os.Getenv("GOOGLE_CLIENT_ID")
-	redirectURI := os.Getenv("GOOGLE_REDIRECT_URI")
-
 	if clientID == "" {
 		writeJSONError(w, http.StatusInternalServerError, "GOOGLE_CLIENT_ID environment variable is not configured")
 		return
 	}
 
-	if redirectURI == "" {
-		frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
-		if frontendOrigin == "" {
-			frontendOrigin = "http://localhost:8080"
-		}
-		redirectURI = strings.TrimSuffix(frontendOrigin, "/") + "/api/auth/google/callback"
-	}
+	redirectURI := getGoogleRedirectURI()
 
 	stateBytes := make([]byte, 16)
 	_, _ = rand.Read(stateBytes)
@@ -231,17 +235,13 @@ func handleGoogleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	clientID := os.Getenv("GOOGLE_CLIENT_ID")
 	clientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
-	redirectURI := os.Getenv("GOOGLE_REDIRECT_URI")
+	redirectURI := getGoogleRedirectURI()
 
 	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
 	if frontendOrigin == "" {
-		frontendOrigin = "https://enlazer.cloud"
+		frontendOrigin = "https://www.enlazer.cloud"
 	}
 	frontendOrigin = strings.TrimSuffix(frontendOrigin, "/")
-
-	if redirectURI == "" {
-		redirectURI = frontendOrigin + "/api/auth/google/callback"
-	}
 
 	// Exchange Code for Access Token / ID Token
 	resp, err := http.PostForm("https://oauth2.googleapis.com/token", url.Values{

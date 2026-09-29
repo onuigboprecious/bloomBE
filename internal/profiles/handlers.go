@@ -56,7 +56,7 @@ func (h *Handler) HandleGetProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	username = strings.TrimPrefix(username, "@")
 	if username == "" {
-		username = "precious"
+		username = "user"
 	}
 
 	// Verify HMAC signature if sig parameter is present
@@ -114,7 +114,7 @@ func (h *Handler) HandleGetMyProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		// Fallback to default
-		profile, _ = h.svc.GetByUsername(r.Context(), "precious")
+		profile, _ = h.svc.GetByUsername(r.Context(), "user")
 	}
 
 	writeJSON(w, http.StatusOK, profile)

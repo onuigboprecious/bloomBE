@@ -49,40 +49,32 @@ func (s *Service) seedDefaultProfiles() {
 	defer s.mu.Unlock()
 
 	defaultProfile := &models.BloomProfile{
-		Name:     "Kelvin Uchechukwu",
-		Username: "kelvin",
-		Title:    "Product Designer & Tech Founder",
-		Company:  "Enlazer Labs",
-		Bio:      "Crafting intuitive digital products & high-impact physical NFC networking solutions across Africa.",
-		Avatar:   "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80",
-		Email:    "kelvin@enlazer.cloud",
-		Phone:    "+234 814 990 1234",
-		Website:  "https://enlazer.cloud/@kelvin",
-		Location: "Lagos & Abuja, Nigeria",
+		Name:     "User",
+		Username: "user",
+		Title:    "",
+		Company:  "",
+		Bio:      "",
+		Avatar:   "",
+		Email:    "user@enlazer.cloud",
+		Phone:    "",
+		Website:  "https://enlazer.cloud/@user",
+		Location: "",
 		Theme:    "dark-luxe",
 		Layout:   "stack",
 		CardUid:  "ENZ-9921-NFC",
-		Socials: map[string]interface{}{
-			"instagram": "kelvin.design",
-			"tiktok":    "@kelvin_tech",
-			"twitter":   "kelvin_uche",
-			"whatsapp":  "+2348149901234",
-			"calendly":  "https://calendly.com/kelvin-uche/30min",
-			"linkedin":  "kelvin-uchechukwu",
-			"portfolio": "https://enlazer.cloud/@kelvin",
-		},
+		Socials:  map[string]interface{}{},
 		Stats: models.ProfileStats{
-			TotalTaps:      1422,
-			MonthlyTaps:    482,
-			UniqueVisitors: 1104,
-			LeadsCaptured:  348,
+			TotalTaps:      0,
+			MonthlyTaps:    0,
+			UniqueVisitors: 0,
+			LeadsCaptured:  0,
 		},
 	}
 
-	s.profiles["kelvin"] = defaultProfile
+	s.profiles["user"] = defaultProfile
 	s.profiles["precious"] = defaultProfile
-	s.cardToUser["ENZ-9921-NFC"] = "kelvin"
-	s.userToCard["kelvin"] = "ENZ-9921-NFC"
+	s.cardToUser["ENZ-9921-NFC"] = "user"
+	s.userToCard["user"] = "ENZ-9921-NFC"
 	s.userToCard["precious"] = "ENZ-9921-NFC"
 }
 
