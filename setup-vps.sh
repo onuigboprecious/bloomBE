@@ -33,11 +33,12 @@ else
 fi
 
 # 3. Configure Firewall (UFW)
-echo -e "\n${YELLOW}==> 2. Configuring firewall rules (SSH: 22, HTTP: 80, API: 8080)...${NC}"
+echo -e "\n${YELLOW}==> 2. Configuring firewall rules (SSH: 22, HTTP: 80, API: 8080, DB: 5432)...${NC}"
 ufw allow 22/tcp
 ufw allow 80/tcp
 ufw allow 8080/tcp
 ufw allow 443/tcp
+ufw allow 5432/tcp
 ufw --force enable
 echo -e "${GREEN}✓ Firewall configured.${NC}"
 
