@@ -1,0 +1,8 @@
+api.enlazer.cloud {
+    reverse_proxy backend:8080
+}
+
+# Optional: root domain redirect or reverse proxy
+enlazer.cloud {
+    reverse_proxy backend:8080
+}

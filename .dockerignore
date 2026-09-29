@@ -1,0 +1,36 @@
+# Binaries
+*.exe
+*.exe shadow
+*.dll
+*.so
+*.dylib
+server
+app
+main
+backend
+bin/
+
+# Test binary
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace files
+go.work
+go.work.sum
+*.work.sum
+
+# Local environment
+.env
+.env.local
+
+# Docker
+.git
+.gitignore
+Dockerfile
+docker-compose.yml
+*.md
