@@ -28,9 +28,24 @@ services:
       - .env
     environment:
       DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/nfc_db?sslmode=disable
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: nfc_caddy
+    restart: always
     ports:
-      - "8080:8080"
-      - "80:8080"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:
+  caddy_data:
+  caddy_config:
