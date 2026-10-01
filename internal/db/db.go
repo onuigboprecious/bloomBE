@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"time"
 
 	_ "github.com/lib/pq"
 )
@@ -18,6 +19,12 @@ func InitDB(databaseURL string) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open postgres database: %w", err)
 	}
+
+	// Optimize connection pooling to prevent per-query connection latency and exhaustion
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(25)
+	db.SetConnMaxLifetime(5 * time.Minute)
+	db.SetConnMaxIdleTime(2 * time.Minute)
 
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping postgres database: %w", err)
@@ -210,6 +217,13 @@ func migrateSchema(db *sql.DB) error {
 	CREATE INDEX IF NOT EXISTS idx_taps_card_uid ON taps(card_uid);
 	CREATE INDEX IF NOT EXISTS idx_nfc_cards_user_id ON nfc_cards(user_id);
 	CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
+
+	-- Functional indexes for fast case-insensitive lookups (LOWER(...))
+	CREATE INDEX IF NOT EXISTS idx_users_username_lower ON users(LOWER(username));
+	CREATE INDEX IF NOT EXISTS idx_users_email_lower ON users(LOWER(email));
+	CREATE INDEX IF NOT EXISTS idx_profiles_card_uid_lower ON profiles(LOWER(card_uid));
+	CREATE INDEX IF NOT EXISTS idx_nfc_cards_card_uid_lower ON nfc_cards(LOWER(card_uid));
+	CREATE INDEX IF NOT EXISTS idx_taps_card_uid_lower ON taps(LOWER(card_uid));
 	`
 
 	_, err := db.Exec(schema)

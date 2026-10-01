@@ -1,3 +1,16 @@
 api.enlazer.cloud {
-    reverse_proxy backend:8080
+    encode zstd gzip
+
+    # Cache public profile reads for 60 seconds (keeps tap responses sub-20ms)
+    @profileGet {
+        method GET
+        path /api/profile/*
+    }
+    header @profileGet Cache-Control "public, max-age=60, s-maxage=300, stale-while-revalidate=86400"
+
+    reverse_proxy backend:8080 {
+        transport http {
+            keepalive 60s
+        }
+    }
 }
