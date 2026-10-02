@@ -97,7 +97,21 @@ func processGoogleUser(w http.ResponseWriter, info *GoogleTokenInfo) (*User, *Se
 		isNewUser = true
 		parts := strings.Split(email, "@")
 		reg := regexp.MustCompile("[^a-zA-Z0-9_-]")
-		username := reg.ReplaceAllString(parts[0], "")
+		baseUsername := reg.ReplaceAllString(parts[0], "")
+		if baseUsername == "" {
+			baseUsername = "user"
+		}
+		username := baseUsername
+
+		// Ensure unique username
+		for i := 0; i < 10; i++ {
+			if _, exists := findUserByUsername(username); !exists {
+				break
+			}
+			randNum := make([]byte, 2)
+			_, _ = rand.Read(randNum)
+			username = fmt.Sprintf("%s%d", baseUsername, int(randNum[0])%900+100)
+		}
 
 		idBytes := make([]byte, 16)
 		_, _ = rand.Read(idBytes)

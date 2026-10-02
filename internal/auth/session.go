@@ -283,17 +283,34 @@ func findUserByGoogleID(googleID string) (*User, bool) {
 	return nil, false
 }
 
+func findUserByUsername(username string) (*User, bool) {
+	if username == "" {
+		return nil, false
+	}
+	if activeService != nil && activeService.db != nil {
+		query := `SELECT id, email, name, COALESCE(username, ''), COALESCE(password_hash, ''), COALESCE(google_id, ''), COALESCE(avatar_url, ''), is_pro, created_at, updated_at FROM users WHERE LOWER(username) = LOWER($1)`
+		var u User
+		err := activeService.db.QueryRow(query, username).Scan(
+			&u.ID, &u.Email, &u.Name, &u.Username, &u.PasswordHash, &u.GoogleID, &u.AvatarURL, &u.IsPro, &u.CreatedAt, &u.UpdatedAt,
+		)
+		if err == nil {
+			return &u, true
+		}
+	}
+
+	mu.RLock()
+	defer mu.RUnlock()
+	for _, u := range users {
+		if strings.EqualFold(u.Username, username) {
+			return u, true
+		}
+	}
+	return nil, false
+}
+
 func saveUser(u *User) error {
 	// Persist to DB if connected
 	if activeService != nil && activeService.db != nil {
-		query := `
-		INSERT INTO users (id, email, name, username, password_hash, google_id, avatar_url, is_pro, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		ON CONFLICT (id) DO UPDATE SET
-			google_id = EXCLUDED.google_id,
-			avatar_url = EXCLUDED.avatar_url,
-			updated_at = EXCLUDED.updated_at
-		`
 		var usernameNull, passNull, googleNull, avatarNull sql.NullString
 		if u.Username != "" {
 			usernameNull = sql.NullString{String: u.Username, Valid: true}
@@ -307,7 +324,45 @@ func saveUser(u *User) error {
 		if u.AvatarURL != "" {
 			avatarNull = sql.NullString{String: u.AvatarURL, Valid: true}
 		}
-		_, err := activeService.db.Exec(query, u.ID, u.Email, u.Name, usernameNull, passNull, googleNull, avatarNull, u.IsPro, u.CreatedAt, u.UpdatedAt)
+
+		// Try updating existing user by ID or Email first
+		updateQuery := `
+		UPDATE users SET
+			email = $2,
+			name = $3,
+			username = COALESCE($4, username),
+			password_hash = COALESCE($5, password_hash),
+			google_id = COALESCE($6, google_id),
+			avatar_url = COALESCE($7, avatar_url),
+			is_pro = $8,
+			updated_at = $9
+		WHERE id = $1 OR email = $2
+		`
+		res, err := activeService.db.Exec(updateQuery, u.ID, u.Email, u.Name, usernameNull, passNull, googleNull, avatarNull, u.IsPro, u.UpdatedAt)
+		if err == nil {
+			if rows, _ := res.RowsAffected(); rows > 0 {
+				var actualID string
+				if errScan := activeService.db.QueryRow(`SELECT id FROM users WHERE email = $1`, u.Email).Scan(&actualID); errScan == nil {
+					u.ID = actualID
+				}
+				mu.Lock()
+				users[u.ID] = u
+				byEmail[u.Email] = u.ID
+				mu.Unlock()
+				return nil
+			}
+		}
+
+		// Otherwise insert new user
+		insertQuery := `
+		INSERT INTO users (id, email, name, username, password_hash, google_id, avatar_url, is_pro, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		ON CONFLICT (id) DO UPDATE SET
+			google_id = COALESCE(EXCLUDED.google_id, users.google_id),
+			avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
+			updated_at = EXCLUDED.updated_at
+		`
+		_, err = activeService.db.Exec(insertQuery, u.ID, u.Email, u.Name, usernameNull, passNull, googleNull, avatarNull, u.IsPro, u.CreatedAt, u.UpdatedAt)
 		if err != nil {
 			return errors.New("user with this email or username already exists")
 		}
