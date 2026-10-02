@@ -119,7 +119,7 @@ func processGoogleUser(w http.ResponseWriter, info *GoogleTokenInfo) (*User, *Se
 		}
 
 		// Asynchronously send Welcome Email for newly registered users
-		go sendResendWelcomeEmail(user.Email, user.Name, user.Username)
+		go sendResendWelcomeEmail(user.Email, user.Name, user.Username, user.AvatarURL)
 	}
 
 	session, err := createSessionAndSetCookie(w, user.ID)

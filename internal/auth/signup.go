@@ -97,7 +97,7 @@ func handleSignup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Asynchronously dispatch Welcome Email via Resend
-	go sendResendWelcomeEmail(newUser.Email, newUser.Name, newUser.Username)
+	go sendResendWelcomeEmail(newUser.Email, newUser.Name, newUser.Username, newUser.AvatarURL)
 
 	pub := newUser.ToPublic()
 	_ = writeJSON(w, http.StatusCreated, map[string]interface{}{
@@ -113,7 +113,7 @@ func handleSignup(w http.ResponseWriter, r *http.Request) {
 }
 
 // sendResendWelcomeEmail sends a welcome email to newly registered users via Resend.
-func sendResendWelcomeEmail(toEmail, userName, username string) {
+func sendResendWelcomeEmail(toEmail, fullName, username, avatarURL string) {
 	apiKey := os.Getenv("RESEND_API_KEY")
 	if apiKey == "" {
 		log.Println("auth: notice - RESEND_API_KEY env var not set. Skipping welcome email.")
@@ -125,13 +125,35 @@ func sendResendWelcomeEmail(toEmail, userName, username string) {
 		frontendOrigin = "https://enlazer.cloud"
 	}
 	frontendOrigin = strings.TrimSuffix(frontendOrigin, "/")
+
+	// Calculate lead name (first name)
+	leadName := fullName
+	if parts := strings.Fields(fullName); len(parts) > 0 {
+		leadName = parts[0]
+	}
+
+	if avatarURL == "" {
+		avatarURL = "https://enlazer.cloud/default-avatar.png"
+	}
+
 	profileURL := fmt.Sprintf("%s/@%s", frontendOrigin, username)
 	dashboardURL := fmt.Sprintf("%s/dashboard", frontendOrigin)
+	subject := fmt.Sprintf("Welcome to Enlazer, %s! Your Digital Card is Ready", leadName)
+	preheader := "Your account is live and your digital card profile is ready. Tap to view and share!"
+
+	// Substitute template variables
+	htmlContent := renderWelcomeTemplate(map[string]string{
+		"subject":       subject,
+		"preheader":     preheader,
+		"FULL_NAME":     fullName,
+		"lead_Name":     leadName,
+		"HANDLE":        username,
+		"AVATAR_URL":    avatarURL,
+		"PROFILE_URL":   profileURL,
+		"DASHBOARD_URL": dashboardURL,
+	})
 
 	fromEmail := getResendFromEmail()
-	subject := fmt.Sprintf("Welcome to Enlazer, %s! Your Digital Card is Ready", userName)
-	htmlContent := buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL)
-
 	payload := map[string]interface{}{
 		"from":    fromEmail,
 		"to":      []string{toEmail},
@@ -170,26 +192,38 @@ func sendResendWelcomeEmail(toEmail, userName, username string) {
 	log.Printf("auth: Resend welcome email sent successfully to %s (Status: %d)", toEmail, resp.StatusCode)
 }
 
-// buildWelcomeEmailHTML constructs a responsive, modern HTML welcome email body with card linking & tapping instructions.
-func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) string {
-	currentYear := time.Now().Year()
+// renderWelcomeTemplate fills in all {{{variable}}} template placeholders.
+func renderWelcomeTemplate(vars map[string]string) string {
+	tpl := welcomeTemplateHTML
+	for k, v := range vars {
+		tpl = strings.ReplaceAll(tpl, "{{{"+k+"}}}", v)
+	}
+	tpl = strings.ReplaceAll(tpl, "{{{year}}}", fmt.Sprintf("%d", time.Now().Year()))
+	return tpl
+}
 
-	return fmt.Sprintf(`<!DOCTYPE html>
+const welcomeTemplateHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Welcome to Enlazer</title>
+  <title>{{{subject}}}</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #F1F5F9; font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #1E293B;">
-  <table role="presentation" width="100%%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F1F5F9; padding: 40px 10px;">
+  
+  <!-- Preheader Preview Text -->
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;">
+    {{{preheader}}}
+  </div>
+
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F1F5F9; padding: 40px 10px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border-radius: 20px; overflow: hidden; border: 1px solid #E2E8F0; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);">
+        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border-radius: 20px; overflow: hidden; border: 1px solid #E2E8F0; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);">
           
           <!-- Header Banner -->
           <tr>
-            <td style="background-color: #0F172A; padding: 36px 40px; text-align: center; background-image: linear-gradient(135deg, #0F172A 0%%, #1E293B 100%%);">
+            <td style="background-color: #0F172A; padding: 36px 40px; text-align: center; background-image: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);">
               <div style="font-size: 32px; font-weight: 900; color: #ffffff; letter-spacing: -0.5px; margin-bottom: 6px;">
                 enlazer<span style="color: #00BCFF;">.</span>
               </div>
@@ -203,31 +237,34 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
           <tr>
             <td style="padding: 40px 36px;">
               <h1 style="color: #0F172A; font-size: 24px; font-weight: 800; margin-top: 0; margin-bottom: 12px; line-height: 1.3;">
-                Welcome to Enlazer, %s!
+                Welcome to Enlazer, {{{lead_Name}}}!
               </h1>
               <p style="color: #475569; font-size: 15px; line-height: 1.6; margin-top: 0; margin-bottom: 28px;">
                 Your account is live and your digital card profile is ready. Here is how to link your physical card and let people view your profile with a simple tap!
               </p>
 
               <!-- Profile Link Card Box -->
-              <table role="presentation" width="100%%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px; margin-bottom: 28px;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 14px; margin-bottom: 28px;">
                 <tr>
                   <td style="padding: 24px;">
+                    <div style="font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 6px;">
+                      Full Name: <span style="font-weight: 600; color: #475569;">{{{FULL_NAME}}}</span>
+                    </div>
                     <div style="font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 8px;">
-                      Your Unique Profile Link & Handle: <span style="color: #00BCFF; font-weight: 800;">@%s</span>
+                      Your Unique Handle: <span style="color: #00BCFF; font-weight: 800;">@{{{HANDLE}}}</span>
                     </div>
                     <div style="font-size: 13px; color: #64748B; word-break: break-all;">
-                      <a href="%s" style="color: #00BCFF; text-decoration: none; font-weight: 600;">%s</a>
+                      Profile Link: <a href="{{{PROFILE_URL}}}" style="color: #00BCFF; text-decoration: none; font-weight: 600;">{{{PROFILE_URL}}}</a>
                     </div>
                   </td>
                 </tr>
               </table>
 
               <!-- Action Button -->
-              <table role="presentation" width="100%%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 32px;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 32px;">
                 <tr>
                   <td align="center">
-                    <a href="%s" style="display: inline-block; background-color: #00BCFF; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 15px 36px; border-radius: 12px; box-shadow: 0 4px 14px rgba(0, 188, 255, 0.35);">
+                    <a href="{{{DASHBOARD_URL}}}" style="display: inline-block; background-color: #00BCFF; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 15px 36px; border-radius: 12px; box-shadow: 0 4px 14px rgba(0, 188, 255, 0.35);">
                       Open Dashboard & Setup Profile →
                     </a>
                   </td>
@@ -241,10 +278,10 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
                 💳 Step 1: How to Link Your Physical Enlazer Card
               </div>
 
-              <table role="presentation" width="100%%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
                 <tr>
                   <td width="36" valign="top" style="padding-bottom: 16px;">
-                    <div style="width: 26px; height: 26px; background-color: #E0F2FE; color: #0284C7; border-radius: 50%%; text-align: center; font-weight: 800; font-size: 13px; line-height: 26px;">1</div>
+                    <div style="width: 26px; height: 26px; background-color: #E0F2FE; color: #0284C7; border-radius: 50%; text-align: center; font-weight: 800; font-size: 13px; line-height: 26px;">1</div>
                   </td>
                   <td valign="top" style="padding-bottom: 16px; padding-left: 10px;">
                     <div style="font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 2px;">Log into your Dashboard</div>
@@ -253,7 +290,7 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
                 </tr>
                 <tr>
                   <td width="36" valign="top" style="padding-bottom: 16px;">
-                    <div style="width: 26px; height: 26px; background-color: #E0F2FE; color: #0284C7; border-radius: 50%%; text-align: center; font-weight: 800; font-size: 13px; line-height: 26px;">2</div>
+                    <div style="width: 26px; height: 26px; background-color: #E0F2FE; color: #0284C7; border-radius: 50%; text-align: center; font-weight: 800; font-size: 13px; line-height: 26px;">2</div>
                   </td>
                   <td valign="top" style="padding-bottom: 16px; padding-left: 10px;">
                     <div style="font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 2px;">Tap Card or Enter Code</div>
@@ -262,7 +299,7 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
                 </tr>
                 <tr>
                   <td width="36" valign="top">
-                    <div style="width: 26px; height: 26px; background-color: #E0F2FE; color: #0284C7; border-radius: 50%%; text-align: center; font-weight: 800; font-size: 13px; line-height: 26px;">3</div>
+                    <div style="width: 26px; height: 26px; background-color: #E0F2FE; color: #0284C7; border-radius: 50%; text-align: center; font-weight: 800; font-size: 13px; line-height: 26px;">3</div>
                   </td>
                   <td valign="top" style="padding-left: 10px;">
                     <div style="font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 2px;">Instant Card Binding</div>
@@ -276,10 +313,10 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
                 📱 Step 2: How People See Your Profile when Tapping
               </div>
 
-              <table role="presentation" width="100%%" border="0" cellspacing="0" cellpadding="0">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr>
                   <td width="36" valign="top" style="padding-bottom: 16px;">
-                    <div style="width: 26px; height: 26px; background-color: #F0FDF4; color: #16A34A; border-radius: 50%%; text-align: center; font-weight: 800; font-size: 13px; line-height: 26px;">1</div>
+                    <div style="width: 26px; height: 26px; background-color: #F0FDF4; color: #16A34A; border-radius: 50%; text-align: center; font-weight: 800; font-size: 13px; line-height: 26px;">1</div>
                   </td>
                   <td valign="top" style="padding-bottom: 16px; padding-left: 10px;">
                     <div style="font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 2px;">Tap Card Against Phone</div>
@@ -288,7 +325,7 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
                 </tr>
                 <tr>
                   <td width="36" valign="top" style="padding-bottom: 16px;">
-                    <div style="width: 26px; height: 26px; background-color: #F0FDF4; color: #16A34A; border-radius: 50%%; text-align: center; font-weight: 800; font-size: 13px; line-height: 26px;">2</div>
+                    <div style="width: 26px; height: 26px; background-color: #F0FDF4; color: #16A34A; border-radius: 50%; text-align: center; font-weight: 800; font-size: 13px; line-height: 26px;">2</div>
                   </td>
                   <td valign="top" style="padding-bottom: 16px; padding-left: 10px;">
                     <div style="font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 2px;">Instant Notification Opens</div>
@@ -297,7 +334,7 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
                 </tr>
                 <tr>
                   <td width="36" valign="top">
-                    <div style="width: 26px; height: 26px; background-color: #F0FDF4; color: #16A34A; border-radius: 50%%; text-align: center; font-weight: 800; font-size: 13px; line-height: 26px;">3</div>
+                    <div style="width: 26px; height: 26px; background-color: #F0FDF4; color: #16A34A; border-radius: 50%; text-align: center; font-weight: 800; font-size: 13px; line-height: 26px;">3</div>
                   </td>
                   <td valign="top" style="padding-left: 10px;">
                     <div style="font-size: 14px; font-weight: 700; color: #0F172A; margin-bottom: 2px;">Save Contact & Share Back</div>
@@ -316,7 +353,7 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
                 Need help getting started? We are a mail away <a href="mailto:support@enlazer.com.ng" style="color: #00BCFF; text-decoration: none; font-weight: 600;">support@enlazer.com.ng</a>
               </p>
               <p style="font-size: 12px; color: #CBD5E1; margin: 0;">
-                © %d Enlazar - IaaS. All rights reserved.
+                © {{{year}}} Enlazar - IaaS. All rights reserved.
               </p>
             </td>
           </tr>
@@ -326,5 +363,4 @@ func buildWelcomeEmailHTML(userName, username, profileURL, dashboardURL string) 
     </tr>
   </table>
 </body>
-</html>`, userName, username, profileURL, profileURL, dashboardURL, currentYear)
-}
+</html>`
