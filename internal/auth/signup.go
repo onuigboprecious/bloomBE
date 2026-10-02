@@ -141,8 +141,7 @@ func sendResendWelcomeEmail(toEmail, fullName, username, avatarURL string) {
 	subject := fmt.Sprintf("Welcome to Enlazer, %s! Your Digital Card is Ready", leadName)
 	preheader := "Your account is live and your digital card profile is ready. Tap to view and share!"
 
-	// Substitute template variables
-	htmlContent := renderWelcomeTemplate(map[string]string{
+	templateVars := map[string]interface{}{
 		"subject":       subject,
 		"preheader":     preheader,
 		"FULL_NAME":     fullName,
@@ -151,14 +150,39 @@ func sendResendWelcomeEmail(toEmail, fullName, username, avatarURL string) {
 		"AVATAR_URL":    avatarURL,
 		"PROFILE_URL":   profileURL,
 		"DASHBOARD_URL": dashboardURL,
-	})
+	}
 
 	fromEmail := getResendFromEmail()
-	payload := map[string]interface{}{
-		"from":    fromEmail,
-		"to":      []string{toEmail},
-		"subject": subject,
-		"html":    htmlContent,
+	templateID := os.Getenv("RESEND_WELCOME_TEMPLATE_ID")
+	if templateID == "" {
+		templateID = os.Getenv("RESEND_TEMPLATE_ID")
+	}
+
+	var payload map[string]interface{}
+	if templateID != "" {
+		// Send using published Resend Dashboard Template
+		payload = map[string]interface{}{
+			"from":    fromEmail,
+			"to":      []string{toEmail},
+			"subject": subject,
+			"template": map[string]interface{}{
+				"id":        templateID,
+				"variables": templateVars,
+			},
+		}
+	} else {
+		// Fallback: render HTML template locally and send html body
+		stringVars := make(map[string]string)
+		for k, v := range templateVars {
+			stringVars[k] = fmt.Sprintf("%v", v)
+		}
+		htmlContent := renderWelcomeTemplate(stringVars)
+		payload = map[string]interface{}{
+			"from":    fromEmail,
+			"to":      []string{toEmail},
+			"subject": subject,
+			"html":    htmlContent,
+		}
 	}
 
 	bodyBytes, err := json.Marshal(payload)
@@ -189,7 +213,11 @@ func sendResendWelcomeEmail(toEmail, fullName, username, avatarURL string) {
 		return
 	}
 
-	log.Printf("auth: Resend welcome email sent successfully to %s (Status: %d)", toEmail, resp.StatusCode)
+	if templateID != "" {
+		log.Printf("auth: Resend welcome email sent using template %s to %s (Status: %d)", templateID, toEmail, resp.StatusCode)
+	} else {
+		log.Printf("auth: Resend welcome email sent successfully to %s (Status: %d)", toEmail, resp.StatusCode)
+	}
 }
 
 // renderWelcomeTemplate fills in all {{{variable}}} template placeholders.
