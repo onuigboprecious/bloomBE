@@ -81,7 +81,9 @@ func processGoogleUser(w http.ResponseWriter, info *GoogleTokenInfo) (*User, *Se
 		if picture != "" && user.AvatarURL != picture {
 			user.AvatarURL = picture
 			user.UpdatedAt = time.Now()
-			_ = saveUser(user)
+			if err := saveUser(user); err != nil {
+				log.Printf("auth: warning - failed to update existing google user avatar: %v", err)
+			}
 		}
 	} else if existing, ok := findUserByEmail(email); ok {
 		// 2. Search by Email - Link Google account to existing user
@@ -91,7 +93,9 @@ func processGoogleUser(w http.ResponseWriter, info *GoogleTokenInfo) (*User, *Se
 			user.AvatarURL = picture
 		}
 		user.UpdatedAt = time.Now()
-		_ = saveUser(user)
+		if err := saveUser(user); err != nil {
+			return nil, nil, fmt.Errorf("failed to link google account to user: %w", err)
+		}
 	} else {
 		// 3. Register New User
 		isNewUser = true
