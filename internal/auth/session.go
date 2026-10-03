@@ -4,7 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
-	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -153,9 +153,10 @@ func currentUser(r *http.Request) (*User, bool) {
 		go func(t string) {
 			_, _ = activeService.db.Exec(`DELETE FROM sessions WHERE token = $1 AND (expires_at <= NOW() OR last_activity_at <= NOW() - INTERVAL '30 minutes')`, t)
 		}(token)
+		return nil, false
 	}
 
-	// Fallback to in-memory store
+	// Fallback to in-memory store only if DB is not connected
 	now := time.Now()
 	mu.Lock()
 	session, exists := sessions[token]
@@ -235,20 +236,21 @@ func destroySession(r *http.Request) {
 func findUserByEmail(email string) (*User, bool) {
 	// Query DB first if connected
 	if activeService != nil && activeService.db != nil {
-		query := `SELECT id, email, name, COALESCE(username, ''), COALESCE(password_hash, ''), COALESCE(google_id, ''), COALESCE(avatar_url, ''), is_pro, created_at, updated_at FROM users WHERE email = $1`
+		query := `SELECT id, email, name, COALESCE(username, ''), COALESCE(password_hash, ''), COALESCE(google_id, ''), COALESCE(avatar_url, ''), is_pro, created_at, updated_at FROM users WHERE LOWER(email) = LOWER($1)`
 		var u User
-		err := activeService.db.QueryRow(query, email).Scan(
+		err := activeService.db.QueryRow(query, strings.TrimSpace(email)).Scan(
 			&u.ID, &u.Email, &u.Name, &u.Username, &u.PasswordHash, &u.GoogleID, &u.AvatarURL, &u.IsPro, &u.CreatedAt, &u.UpdatedAt,
 		)
 		if err == nil {
 			return &u, true
 		}
+		return nil, false
 	}
 
-	// Fallback to in-memory store
+	// Fallback to in-memory store only if DB is not connected
 	mu.RLock()
 	defer mu.RUnlock()
-	userID, ok := byEmail[email]
+	userID, ok := byEmail[strings.ToLower(strings.TrimSpace(email))]
 	if !ok {
 		return nil, false
 	}
@@ -270,9 +272,10 @@ func findUserByGoogleID(googleID string) (*User, bool) {
 		if err == nil {
 			return &u, true
 		}
+		return nil, false
 	}
 
-	// Fallback to in-memory store
+	// Fallback to in-memory store only if DB is not connected
 	mu.RLock()
 	defer mu.RUnlock()
 	for _, u := range users {
@@ -290,14 +293,16 @@ func findUserByUsername(username string) (*User, bool) {
 	if activeService != nil && activeService.db != nil {
 		query := `SELECT id, email, name, COALESCE(username, ''), COALESCE(password_hash, ''), COALESCE(google_id, ''), COALESCE(avatar_url, ''), is_pro, created_at, updated_at FROM users WHERE LOWER(username) = LOWER($1)`
 		var u User
-		err := activeService.db.QueryRow(query, username).Scan(
+		err := activeService.db.QueryRow(query, strings.TrimSpace(username)).Scan(
 			&u.ID, &u.Email, &u.Name, &u.Username, &u.PasswordHash, &u.GoogleID, &u.AvatarURL, &u.IsPro, &u.CreatedAt, &u.UpdatedAt,
 		)
 		if err == nil {
 			return &u, true
 		}
+		return nil, false
 	}
 
+	// Fallback to in-memory store only if DB is not connected
 	mu.RLock()
 	defer mu.RUnlock()
 	for _, u := range users {
@@ -336,18 +341,18 @@ func saveUser(u *User) error {
 			avatar_url = COALESCE($7, avatar_url),
 			is_pro = $8,
 			updated_at = $9
-		WHERE id = $1 OR email = $2
+		WHERE id = $1 OR LOWER(email) = LOWER($2)
 		`
 		res, err := activeService.db.Exec(updateQuery, u.ID, u.Email, u.Name, usernameNull, passNull, googleNull, avatarNull, u.IsPro, u.UpdatedAt)
 		if err == nil {
 			if rows, _ := res.RowsAffected(); rows > 0 {
 				var actualID string
-				if errScan := activeService.db.QueryRow(`SELECT id FROM users WHERE email = $1`, u.Email).Scan(&actualID); errScan == nil {
+				if errScan := activeService.db.QueryRow(`SELECT id FROM users WHERE LOWER(email) = LOWER($1)`, u.Email).Scan(&actualID); errScan == nil {
 					u.ID = actualID
 				}
 				mu.Lock()
 				users[u.ID] = u
-				byEmail[u.Email] = u.ID
+				byEmail[strings.ToLower(u.Email)] = u.ID
 				mu.Unlock()
 				return nil
 			}
@@ -364,7 +369,7 @@ func saveUser(u *User) error {
 		`
 		_, err = activeService.db.Exec(insertQuery, u.ID, u.Email, u.Name, usernameNull, passNull, googleNull, avatarNull, u.IsPro, u.CreatedAt, u.UpdatedAt)
 		if err != nil {
-			return errors.New("user with this email or username already exists")
+			return fmt.Errorf("failed to insert user into database: %w", err)
 		}
 	}
 
@@ -372,6 +377,6 @@ func saveUser(u *User) error {
 	mu.Lock()
 	defer mu.Unlock()
 	users[u.ID] = u
-	byEmail[u.Email] = u.ID
+	byEmail[strings.ToLower(u.Email)] = u.ID
 	return nil
 }
