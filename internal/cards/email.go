@@ -118,16 +118,39 @@ func SendCardActivationEmail(toEmail, fullName, username, avatarURL, cardUid, fi
 		"profile_url":    profileURL,
 		"DASHBOARD_URL":  dashboardURL,
 		"dashboard_url":  dashboardURL,
+		"name":           fullName,
+		"NAME":           fullName,
+		"email":          toEmail,
+		"EMAIL":          toEmail,
+		"leadName":       leadName,
+		"card_id":        cardUid,
+		"CARD_ID":        cardUid,
+		"cardId":         cardUid,
 		"year":           fmt.Sprintf("%d", time.Now().Year()),
 	}
 
 	fromEmail := getResendFromEmail()
-	templateID := os.Getenv("RESEND_CARD_ACTIVATION_TEMPLATE_ID")
+	templateID := strings.TrimSpace(os.Getenv("RESEND_CARD_ACTIVATION_TEMPLATE_ID"))
 	if templateID == "" {
-		templateID = os.Getenv("RESEND_CARD_ACTIVATED_TEMPLATE_ID")
+		templateID = strings.TrimSpace(os.Getenv("RESEND_CARD_ACTIVATED_TEMPLATE_ID"))
 	}
 	if templateID == "" {
-		templateID = os.Getenv("RESEND_CARD_TEMPLATE_ID")
+		templateID = strings.TrimSpace(os.Getenv("RESEND_CARD_TEMPLATE_ID"))
+	}
+	if templateID == "" {
+		templateID = strings.TrimSpace(os.Getenv("RESEND_CARD_LINK_TEMPLATE_ID"))
+	}
+	if templateID == "" {
+		templateID = strings.TrimSpace(os.Getenv("RESEND_LINK_CARD_TEMPLATE_ID"))
+	}
+	if templateID == "" {
+		templateID = strings.TrimSpace(os.Getenv("RESEND_CARD_CLAIM_TEMPLATE_ID"))
+	}
+	if templateID == "" {
+		templateID = strings.TrimSpace(os.Getenv("CARD_ACTIVATION_TEMPLATE_ID"))
+	}
+	if templateID == "" {
+		templateID = strings.TrimSpace(os.Getenv("CARD_TEMPLATE_ID"))
 	}
 
 	var payload map[string]interface{}
@@ -143,6 +166,7 @@ func SendCardActivationEmail(toEmail, fullName, username, avatarURL, cardUid, fi
 			},
 		}
 	} else {
+		log.Println("cards: notice - RESEND_CARD_ACTIVATION_TEMPLATE_ID is not configured in .env. Falling back to local backend HTML email.")
 		// Fallback: render HTML template locally and send HTML body
 		stringVars := make(map[string]string)
 		for k, v := range templateVars {
