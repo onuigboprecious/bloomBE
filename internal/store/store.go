@@ -430,14 +430,31 @@ func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request
 	}
 
 	var req struct {
-		Status string `json:"status"`
+		Status            string `json:"status"`
+		FulfillmentStatus string `json:"fulfillment_status"`
+		TrackingNumber    string `json:"tracking_number"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Status == "" {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request payload")
+		return
+	}
+	if req.Status == "" && req.FulfillmentStatus != "" {
+		req.Status = req.FulfillmentStatus
+	}
+	if req.Status == "" {
 		writeError(w, http.StatusBadRequest, "status is required")
 		return
 	}
 
+	var email, shippingName, finishName, deliveryAddress, city string
+	var quantity, amount int
+
 	if s.db != nil {
+		_ = s.db.QueryRowContext(r.Context(),
+			`SELECT COALESCE(email, ''), COALESCE(shipping_name, ''), COALESCE(finish_name, ''), quantity, amount, COALESCE(delivery_address, ''), COALESCE(city, '') FROM orders WHERE id = $1`,
+			orderID,
+		).Scan(&email, &shippingName, &finishName, &quantity, &amount, &deliveryAddress, &city)
+
 		_, err := s.db.ExecContext(r.Context(), `UPDATE orders SET status = $1 WHERE id = $2`, req.Status, orderID)
 		if err != nil {
 			log.Printf("update order status error: %v", err)
@@ -449,10 +466,32 @@ func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request
 		if fmt.Sprintf("%v", o["id"]) == orderID {
 			s.memoryOrders[i]["status"] = req.Status
 			s.memoryOrders[i]["fulfillment_status"] = req.Status
+			if email == "" {
+				if v, ok := o["email"]; ok && v != nil {
+					email = fmt.Sprintf("%v", v)
+				}
+				if v, ok := o["shippingName"]; ok && v != nil {
+					shippingName = fmt.Sprintf("%v", v)
+				}
+				if v, ok := o["finishName"]; ok && v != nil {
+					finishName = fmt.Sprintf("%v", v)
+				}
+				if v, ok := o["deliveryAddress"]; ok && v != nil {
+					deliveryAddress = fmt.Sprintf("%v", v)
+				}
+				if v, ok := o["city"]; ok && v != nil {
+					city = fmt.Sprintf("%v", v)
+				}
+			}
 			break
 		}
 	}
 	s.mu.Unlock()
+
+	// If admin updated status to "shipped", dispatch Order Shipped confirmation email via Resend
+	if strings.EqualFold(req.Status, "shipped") && email != "" {
+		go SendOrderShippedEmail(email, shippingName, orderID, finishName, quantity, amount, deliveryAddress, city, req.TrackingNumber)
+	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":  "success",

@@ -104,7 +104,7 @@ func (s *Service) HandleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	resetURL := fmt.Sprintf("%s/reset-password?token=%s", frontendOrigin, token)
 
 	// Asynchronously dispatch email via Resend API
-	go sendResendResetEmail(user.Email, resetURL)
+	go sendResendResetEmail(user.Email, user.Name, user.Username, resetURL)
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":     "success",
@@ -114,30 +114,102 @@ func (s *Service) HandleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// sendResendResetEmail sends a password reset email via Resend API.
-func sendResendResetEmail(toEmail, resetURL string) {
+// sendResendResetEmail sends a password reset email via Resend template or HTML fallback.
+func sendResendResetEmail(toEmail, fullName, username, resetURL string) {
 	apiKey := os.Getenv("RESEND_API_KEY")
 	if apiKey == "" {
 		log.Println("auth: notice - RESEND_API_KEY env var not set. Skipping live Resend email dispatch.")
 		return
 	}
 
+	toEmail = strings.TrimSpace(strings.ToLower(toEmail))
+	if toEmail == "" {
+		return
+	}
+
+	fullName = strings.TrimSpace(fullName)
+	leadName := fullName
+	if parts := strings.Fields(fullName); len(parts) > 0 {
+		leadName = parts[0]
+	}
+	if leadName == "" {
+		leadName = username
+	}
+	if leadName == "" {
+		leadName = "there"
+	}
+	if fullName == "" {
+		fullName = leadName
+	}
+
+	subject := "Reset Your Enlazer Password"
+	preheader := fmt.Sprintf("Hi %s, use this link to reset your Enlazer password.", leadName)
+
+	templateVars := map[string]interface{}{
+		"subject":        subject,
+		"preheader":      preheader,
+		"FULL_NAME":      fullName,
+		"full_name":      fullName,
+		"lead_Name":      leadName,
+		"lead_name":      leadName,
+		"first_name":     leadName,
+		"FIRST_NAME":     leadName,
+		"name":           fullName,
+		"NAME":           fullName,
+		"email":          toEmail,
+		"EMAIL":          toEmail,
+		"HANDLE":         username,
+		"handle":         username,
+		"username":       username,
+		"USERNAME":       username,
+		"RESET_URL":      resetURL,
+		"reset_url":      resetURL,
+		"resetUrl":       resetURL,
+		"RESET_LINK":     resetURL,
+		"reset_link":     resetURL,
+		"resetLink":      resetURL,
+		"year":           fmt.Sprintf("%d", time.Now().Year()),
+	}
+
 	fromEmail := getResendFromEmail()
-	payload := map[string]interface{}{
-		"from":    fromEmail,
-		"to":      []string{toEmail},
-		"subject": "Reset Your Enlazer Password",
-		"html": fmt.Sprintf(`
-			<div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 20px;">
-				<h2 style="color: #0F172A;">Reset Your Password</h2>
-				<p>We received a request to reset your password for your Enlazer account.</p>
-				<p style="margin: 25px 0;">
-					<a href="%s" style="background-color: #00BCFF; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Reset Password</a>
-				</p>
-				<p style="color: #666; font-size: 13px;">Or copy and paste this URL into your browser:<br/><a href="%s">%s</a></p>
-				<p style="color: #888; font-size: 12px; margin-top: 30px;">This link will expire in 1 hour. If you did not request a password reset, please ignore this email.</p>
-			</div>
-		`, resetURL, resetURL, resetURL),
+	templateID := strings.TrimSpace(os.Getenv("RESEND_FORGOT_PASSWORD_TEMPLATE_ID"))
+	if templateID == "" {
+		templateID = strings.TrimSpace(os.Getenv("RESEND_PASSWORD_RESET_TEMPLATE_ID"))
+	}
+	if templateID == "" {
+		templateID = strings.TrimSpace(os.Getenv("RESEND_RESET_PASSWORD_TEMPLATE_ID"))
+	}
+	if templateID == "" {
+		templateID = strings.TrimSpace(os.Getenv("FORGOT_PASSWORD_TEMPLATE_ID"))
+	}
+	if templateID == "" {
+		templateID = strings.TrimSpace(os.Getenv("PASSWORD_RESET_TEMPLATE_ID"))
+	}
+
+	var payload map[string]interface{}
+	if templateID != "" {
+		payload = map[string]interface{}{
+			"from":    fromEmail,
+			"to":      []string{toEmail},
+			"subject": subject,
+			"template": map[string]interface{}{
+				"id":        templateID,
+				"variables": templateVars,
+			},
+		}
+	} else {
+		log.Println("auth: notice - RESEND_FORGOT_PASSWORD_TEMPLATE_ID is not configured in .env. Falling back to local backend HTML email.")
+		stringVars := make(map[string]string)
+		for k, v := range templateVars {
+			stringVars[k] = fmt.Sprintf("%v", v)
+		}
+		htmlContent := renderPasswordResetTemplate(stringVars)
+		payload = map[string]interface{}{
+			"from":    fromEmail,
+			"to":      []string{toEmail},
+			"subject": subject,
+			"html":    htmlContent,
+		}
 	}
 
 	bodyBytes, err := json.Marshal(payload)
@@ -168,8 +240,88 @@ func sendResendResetEmail(toEmail, resetURL string) {
 		return
 	}
 
-	log.Printf("auth: Resend password reset email sent successfully to %s (Status: %d)", toEmail, resp.StatusCode)
+	if templateID != "" {
+		log.Printf("auth: Resend password reset email sent using template %s to %s (Status: %d)", templateID, toEmail, resp.StatusCode)
+	} else {
+		log.Printf("auth: Resend password reset email sent successfully via HTML fallback to %s (Status: %d)", toEmail, resp.StatusCode)
+	}
 }
+
+// renderPasswordResetTemplate fills in all {{{variable}}} placeholders in fallback HTML.
+func renderPasswordResetTemplate(vars map[string]string) string {
+	tpl := passwordResetTemplateHTML
+	for k, v := range vars {
+		tpl = strings.ReplaceAll(tpl, "{{{"+k+"}}}", v)
+	}
+	tpl = strings.ReplaceAll(tpl, "{{{year}}}", fmt.Sprintf("%d", time.Now().Year()))
+	return tpl
+}
+
+const passwordResetTemplateHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{{subject}}}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F1F5F9; font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased; color: #1E293B;">
+  <div style="display: none; max-height: 0px; overflow: hidden; mso-hide: all;">
+    {{{preheader}}}
+  </div>
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F1F5F9; padding: 40px 10px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border-radius: 20px; overflow: hidden; border: 1px solid #E2E8F0; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);">
+          <tr>
+            <td style="background-color: #0F172A; padding: 36px 40px; text-align: center; background-image: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);">
+              <div style="font-size: 32px; font-weight: 900; color: #ffffff; letter-spacing: -0.5px; margin-bottom: 6px;">
+                enlazer<span style="color: #00BCFF;">.</span>
+              </div>
+              <div style="color: #94A3B8; font-size: 13px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase;">
+                Account Security & Recovery
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 40px 36px;">
+              <h1 style="color: #0F172A; font-size: 24px; font-weight: 800; margin-top: 0; margin-bottom: 12px; line-height: 1.3;">
+                Reset Your Password
+              </h1>
+              <p style="color: #475569; font-size: 15px; line-height: 1.6; margin-top: 0; margin-bottom: 24px;">
+                Hi {{{lead_Name}}}, we received a request to reset the password for your Enlazer account (<strong>{{{email}}}</strong>). Click the button below to choose a new password.
+              </p>
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
+                <tr>
+                  <td align="center">
+                    <a href="{{{RESET_URL}}}" style="display: inline-block; background-color: #00BCFF; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 36px; border-radius: 12px; box-shadow: 0 4px 14px rgba(0, 188, 255, 0.35);">
+                      Reset Password →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <div style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
+                <p style="font-size: 13px; color: #64748B; margin: 0 0 8px 0;">Or copy and paste this link into your browser:</p>
+                <a href="{{{RESET_URL}}}" style="color: #00BCFF; font-size: 13px; text-decoration: none; word-break: break-all; font-weight: 600;">{{{RESET_URL}}}</a>
+              </div>
+              <p style="font-size: 13px; color: #94A3B8; line-height: 1.5; margin: 0;">
+                ⚠️ This reset link expires in <strong>1 hour</strong>. If you did not request a password reset, you can safely ignore this email — your account remains secure.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 24px 40px; text-align: center;">
+              <p style="font-size: 12px; color: #CBD5E1; margin: 0;">
+                © {{{year}}} Enlazer - IaaS. All rights reserved.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+
 
 // HandleResetPassword handles POST /api/auth/reset-password
 func (s *Service) HandleResetPassword(w http.ResponseWriter, r *http.Request) {
