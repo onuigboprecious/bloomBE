@@ -495,6 +495,7 @@ func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":  "success",
+		"success": true,
 		"message": "Order status updated successfully",
 	})
 }
