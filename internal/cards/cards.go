@@ -410,6 +410,12 @@ func (s *Service) ClaimCard(ctx context.Context, userID, cardUid string) (*NFCCa
 		return nil, errors.New("cardUid is required")
 	}
 
+	frontendOrigin := os.Getenv("FRONTEND_ORIGIN")
+	if frontendOrigin == "" {
+		frontendOrigin = "https://enlazer.cloud"
+	}
+	frontendOrigin = strings.TrimSuffix(frontendOrigin, "/")
+
 	if s.db != nil {
 		var status string
 		var existingUserID sql.NullString
@@ -445,6 +451,7 @@ func (s *Service) ClaimCard(ctx context.Context, userID, cardUid string) (*NFCCa
 			c.UserID = &uNull.String
 		}
 		c.Signature = SignCardUID(cardUid)
+		c.SignedURL = fmt.Sprintf("%s/card/%s?sig=%s", frontendOrigin, cardUid, c.Signature)
 		return &c, nil
 	}
 
@@ -462,6 +469,7 @@ func (s *Service) ClaimCard(ctx context.Context, userID, cardUid string) (*NFCCa
 	c.UserID = &userID
 	c.Status = "claimed"
 	c.Signature = SignCardUID(cardUid)
+	c.SignedURL = fmt.Sprintf("%s/card/%s?sig=%s", frontendOrigin, cardUid, c.Signature)
 	res := *c
 	return &res, nil
 }
@@ -744,6 +752,34 @@ func (h *Handler) HandleClaimCard(w http.ResponseWriter, r *http.Request) {
 		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+
+	// Resolve any missing user profile info from database if needed
+	toEmail := user.Email
+	fullName := user.Name
+	username := user.Username
+	avatarURL := user.AvatarURL
+
+	if (toEmail == "" || username == "") && h.svc.db != nil {
+		var dbEmail, dbName, dbUsername, dbAvatar sql.NullString
+		_ = h.svc.db.QueryRowContext(r.Context(), `SELECT email, name, COALESCE(username, ''), COALESCE(avatar_url, '') FROM users WHERE id = $1`, user.ID).Scan(&dbEmail, &dbName, &dbUsername, &dbAvatar)
+		if dbEmail.Valid && dbEmail.String != "" {
+			toEmail = dbEmail.String
+		}
+		if dbName.Valid && dbName.String != "" && fullName == "" {
+			fullName = dbName.String
+		}
+		if dbUsername.Valid && dbUsername.String != "" && username == "" {
+			username = dbUsername.String
+		}
+		if dbAvatar.Valid && dbAvatar.String != "" && avatarURL == "" {
+			avatarURL = dbAvatar.String
+		}
+	}
+
+	// Dispatch Card Activation confirmation email via Resend asynchronously
+	if toEmail != "" {
+		go SendCardActivationEmail(toEmail, fullName, username, avatarURL, card.CardUid, card.FinishName, card.SignedURL)
 	}
 
 	writeJSON(w, http.StatusOK, card)

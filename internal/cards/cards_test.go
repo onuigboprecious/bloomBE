@@ -121,3 +121,11 @@ func TestBatchProvisioningAndClaiming(t *testing.T) {
 		t.Fatalf("expected 404 StatusNotFound when claiming unprovisioned card, got status %d", resp.StatusCode)
 	}
 }
+
+func TestSendCardActivationEmail(t *testing.T) {
+	// 1. Without API key, should return safely without panic
+	cards.SendCardActivationEmail("test@example.com", "John Doe", "johndoe", "", "ENZ-TEST-001", "Stealth Matte Black", "")
+
+	// 2. With invalid or empty recipient, should return safely
+	cards.SendCardActivationEmail("", "John Doe", "johndoe", "", "ENZ-TEST-001", "Stealth Matte Black", "")
+}
