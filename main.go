@@ -71,9 +71,12 @@ func main() {
 		sentryDSN = "https://8cdd8cbb0047991729f7b5129f53c263@o4512098984853504.ingest.us.sentry.io/4512099005038592"
 	}
 
+	sentryDebug := os.Getenv("SENTRY_DEBUG") == "true"
+
 	if err := sentry.Init(sentry.ClientOptions{
 		Dsn:              sentryDSN,
-		Debug:            true,
+		Debug:            sentryDebug,
+		EnableTracing:    true,
 		TracesSampleRate: 1.0,
 		Environment:      env,
 	}); err != nil {
