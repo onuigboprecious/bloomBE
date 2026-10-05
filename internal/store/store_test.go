@@ -15,6 +15,9 @@ func TestSendOrderShippedEmail(t *testing.T) {
 	// Should return safely without panic when RESEND_API_KEY is not set
 	store.SendOrderShippedEmail("customer@example.com", "Favour Umeh", "972995", "Stealth Matte Black", 1, 19000, "Ajegule GRA", "Lagos", "TRK123456")
 
+	// Call with handle and avatar parameters
+	store.SendOrderShippedEmail("customer@example.com", "Favour Umeh", "972995", "Stealth Matte Black", 1, 19000, "Ajegule GRA", "Lagos", "TRK123456", "favourumeh", "https://example.com/avatar.png")
+
 	// Empty email should return safely without panic
 	store.SendOrderShippedEmail("", "Favour Umeh", "972995", "Stealth Matte Black", 1, 19000, "Ajegule GRA", "Lagos", "")
 }

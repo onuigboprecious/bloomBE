@@ -469,6 +469,8 @@ func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request
 		city            string
 		quantity        int = 1
 		amount          int
+		username        string
+		avatarURL       string
 	)
 
 	if s.db != nil {
@@ -481,7 +483,9 @@ func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request
 			COALESCE(o.quantity, 1),
 			COALESCE(o.amount, 0),
 			COALESCE(o.delivery_address, ''),
-			COALESCE(o.city, '')
+			COALESCE(o.city, ''),
+			COALESCE(u.username, ''),
+			COALESCE(u.avatar_url, '')
 		FROM orders o
 		LEFT JOIN users u ON o.user_id = u.id
 		WHERE o.id = $1 
@@ -492,8 +496,8 @@ func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request
 		LIMIT 1
 		`
 		var qVal, aVal sql.NullInt64
-		var em, sn, fn, da, ct sql.NullString
-		err := s.db.QueryRowContext(r.Context(), query, orderID).Scan(&em, &sn, &fn, &qVal, &aVal, &da, &ct)
+		var em, sn, fn, da, ct, un, av sql.NullString
+		err := s.db.QueryRowContext(r.Context(), query, orderID).Scan(&em, &sn, &fn, &qVal, &aVal, &da, &ct, &un, &av)
 		if err != nil {
 			log.Printf("store: notice - querying order details for %s returned: %v", orderID, err)
 		} else {
@@ -502,11 +506,29 @@ func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request
 			finishName = strings.TrimSpace(fn.String)
 			deliveryAddress = strings.TrimSpace(da.String)
 			city = strings.TrimSpace(ct.String)
+			if un.Valid {
+				username = strings.TrimSpace(un.String)
+			}
+			if av.Valid {
+				avatarURL = strings.TrimSpace(av.String)
+			}
 			if qVal.Valid {
 				quantity = int(qVal.Int64)
 			}
 			if aVal.Valid {
 				amount = int(aVal.Int64)
+			}
+		}
+
+		// If username or avatar was missing from joined order, attempt lookup by email
+		if (username == "" || avatarURL == "") && email != "" {
+			var un2, av2 sql.NullString
+			_ = s.db.QueryRowContext(r.Context(), `SELECT COALESCE(username, ''), COALESCE(avatar_url, '') FROM users WHERE LOWER(email) = LOWER($1) LIMIT 1`, email).Scan(&un2, &av2)
+			if username == "" && un2.Valid {
+				username = strings.TrimSpace(un2.String)
+			}
+			if avatarURL == "" && av2.Valid {
+				avatarURL = strings.TrimSpace(av2.String)
 			}
 		}
 
@@ -525,7 +547,7 @@ func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request
 			log.Printf("store: update order status error for %s: %v", orderID, err)
 		} else {
 			rowsAffected, _ := res.RowsAffected()
-			log.Printf("store: updated order %s status to '%s' (rows affected: %d, recipient email: '%s')", orderID, req.Status, rowsAffected, email)
+			log.Printf("store: updated order %s status to '%s' (rows affected: %d, recipient email: '%s', handle: '%s')", orderID, req.Status, rowsAffected, email, username)
 		}
 	}
 
@@ -552,6 +574,11 @@ func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request
 					city = fmt.Sprintf("%v", v)
 				}
 			}
+			if username == "" {
+				if v, ok := o["username"]; ok && v != nil {
+					username = fmt.Sprintf("%v", v)
+				}
+			}
 			break
 		}
 	}
@@ -564,8 +591,8 @@ func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request
 
 	if isShipped {
 		if email != "" {
-			log.Printf("store: dispatching SendOrderShippedEmail to '%s' for order '%s'", email, orderID)
-			go SendOrderShippedEmail(email, shippingName, orderID, finishName, quantity, amount, deliveryAddress, city, req.TrackingNumber)
+			log.Printf("store: dispatching SendOrderShippedEmail to '%s' (handle: '%s') for order '%s'", email, username, orderID)
+			go SendOrderShippedEmail(email, shippingName, orderID, finishName, quantity, amount, deliveryAddress, city, req.TrackingNumber, username, avatarURL)
 		} else {
 			log.Printf("store: WARNING - order %s was marked as shipped, but no customer email address was found in DB or memory.", orderID)
 		}

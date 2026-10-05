@@ -46,7 +46,8 @@ func formatPrice(amount int) string {
 }
 
 // SendOrderShippedEmail sends a shipment notification email to the customer via Resend template.
-func SendOrderShippedEmail(toEmail, shippingName, orderID, finishName string, quantity, amount int, deliveryAddress, city, trackingNumber string) {
+// Optional optExtras: [0] = username/handle, [1] = avatarURL
+func SendOrderShippedEmail(toEmail, shippingName, orderID, finishName string, quantity, amount int, deliveryAddress, city, trackingNumber string, optExtras ...string) {
 	apiKey := os.Getenv("RESEND_API_KEY")
 	if apiKey == "" {
 		log.Println("store: notice - RESEND_API_KEY env var not set. Skipping order shipped email.")
@@ -77,6 +78,32 @@ func SendOrderShippedEmail(toEmail, shippingName, orderID, finishName string, qu
 		shippingName = "Customer"
 	}
 
+	var username, avatarURL string
+	if len(optExtras) > 0 {
+		username = strings.TrimSpace(optExtras[0])
+	}
+	if len(optExtras) > 1 {
+		avatarURL = strings.TrimSpace(optExtras[1])
+	}
+
+	username = strings.TrimPrefix(strings.TrimSpace(strings.ToLower(username)), "@")
+	if username == "" {
+		parts := strings.Split(toEmail, "@")
+		if len(parts) > 0 {
+			username = parts[0]
+		}
+	}
+	if username == "" {
+		username = leadName
+	}
+	if username == "" {
+		username = "member"
+	}
+
+	if avatarURL == "" {
+		avatarURL = "https://enlazer.cloud/default-avatar.png"
+	}
+
 	if finishName == "" {
 		finishName = "Stealth Matte Black"
 	}
@@ -97,6 +124,7 @@ func SendOrderShippedEmail(toEmail, shippingName, orderID, finishName string, qu
 
 	itemName := fmt.Sprintf("Enlazer Smart Card (%s)", finishName)
 	formattedAmount := formatPrice(amount)
+	profileURL := fmt.Sprintf("%s/@%s", frontendOrigin, username)
 	dashboardURL := fmt.Sprintf("%s/dashboard", frontendOrigin)
 	supportURL := fmt.Sprintf("%s/contact", frontendOrigin)
 
@@ -116,11 +144,25 @@ func SendOrderShippedEmail(toEmail, shippingName, orderID, finishName string, qu
 		"customer_name":    shippingName,
 		"name":             shippingName,
 		"NAME":             shippingName,
+		"HANDLE":           username,
+		"handle":           username,
+		"username":         username,
+		"USERNAME":         username,
+		"USER_NAME":        username,
+		"user_name":        username,
+		"AVATAR_URL":       avatarURL,
+		"avatar_url":       avatarURL,
+		"avatar":           avatarURL,
+		"AVATAR":           avatarURL,
+		"PROFILE_URL":      profileURL,
+		"profile_url":      profileURL,
 		"email":            toEmail,
 		"EMAIL":            toEmail,
 		"ORDER_ID":         orderID,
 		"order_id":         orderID,
 		"orderId":          orderID,
+		"order_number":     orderID,
+		"ORDER_NUMBER":     orderID,
 		"ITEM_NAME":        itemName,
 		"item_name":        itemName,
 		"FINISH_NAME":      finishName,
@@ -133,17 +175,32 @@ func SendOrderShippedEmail(toEmail, shippingName, orderID, finishName string, qu
 		"DELIVERY_ADDRESS": deliveryAddress,
 		"delivery_address": deliveryAddress,
 		"address":          deliveryAddress,
+		"ADDRESS":          deliveryAddress,
 		"CITY":             city,
 		"city":             city,
 		"DESTINATION":      fullAddress,
 		"destination":      fullAddress,
 		"TRACKING_NUMBER":  trackingNumber,
 		"tracking_number":  trackingNumber,
+		"trackingNumber":   trackingNumber,
+		"CARD_URL":         dashboardURL,
+		"card_url":         dashboardURL,
+		"CARD_UID":         orderID,
+		"card_uid":         orderID,
+		"cardUid":          orderID,
+		"CARD_ID":          orderID,
+		"card_id":          orderID,
+		"cardId":           orderID,
+		"STATUS":           "Shipped",
+		"status":           "Shipped",
 		"DASHBOARD_URL":    dashboardURL,
 		"dashboard_url":    dashboardURL,
 		"SUPPORT_URL":      supportURL,
 		"support_url":      supportURL,
+		"CONTACT_URL":      supportURL,
+		"contact_url":      supportURL,
 		"year":             fmt.Sprintf("%d", time.Now().Year()),
+		"YEAR":             fmt.Sprintf("%d", time.Now().Year()),
 	}
 
 	fromEmail := getResendFromEmail()
