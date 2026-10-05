@@ -423,7 +423,22 @@ func (s *Service) HandleListOrders(w http.ResponseWriter, r *http.Request) {
 
 // HandleUpdateOrderStatus handles PATCH /api/admin/orders/{id}/status and PUT /api/admin/orders/{id}/status
 func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
-	orderID := r.PathValue("id")
+	orderID := strings.TrimSpace(r.PathValue("id"))
+	if orderID == "" {
+		// Fallback: extract order ID from URL path (e.g. /api/admin/orders/:id/status or /api/admin/orders/{id}/status)
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		for i, p := range parts {
+			if (p == "orders" || p == "admin") && i+1 < len(parts) {
+				candidate := parts[i+1]
+				if candidate != "status" && candidate != "orders" {
+					orderID = candidate
+					break
+				}
+			}
+		}
+	}
+	orderID = strings.TrimPrefix(orderID, ":")
+
 	if orderID == "" {
 		writeError(w, http.StatusBadRequest, "order id is required")
 		return
@@ -446,24 +461,78 @@ func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	var email, shippingName, finishName, deliveryAddress, city string
-	var quantity, amount int
+	var (
+		email           string
+		shippingName    string
+		finishName      string
+		deliveryAddress string
+		city            string
+		quantity        int = 1
+		amount          int
+	)
 
 	if s.db != nil {
-		_ = s.db.QueryRowContext(r.Context(),
-			`SELECT COALESCE(email, ''), COALESCE(shipping_name, ''), COALESCE(finish_name, ''), quantity, amount, COALESCE(delivery_address, ''), COALESCE(city, '') FROM orders WHERE id = $1`,
-			orderID,
-		).Scan(&email, &shippingName, &finishName, &quantity, &amount, &deliveryAddress, &city)
-
-		_, err := s.db.ExecContext(r.Context(), `UPDATE orders SET status = $1 WHERE id = $2`, req.Status, orderID)
+		// Safe, robust query joining users table if email was not stored directly on order record
+		query := `
+		SELECT 
+			COALESCE(o.email, u.email, ''),
+			COALESCE(NULLIF(o.shipping_name, ''), u.name, 'Customer'),
+			COALESCE(NULLIF(o.finish_name, ''), 'Stealth Matte Black'),
+			COALESCE(o.quantity, 1),
+			COALESCE(o.amount, 0),
+			COALESCE(o.delivery_address, ''),
+			COALESCE(o.city, '')
+		FROM orders o
+		LEFT JOIN users u ON o.user_id = u.id
+		WHERE o.id = $1 
+		   OR LOWER(o.id) = LOWER($1) 
+		   OR o.id LIKE ('%' || $1) 
+		   OR o.id = ('ord-' || $1) 
+		   OR o.id = REPLACE($1, 'ord-', '')
+		LIMIT 1
+		`
+		var qVal, aVal sql.NullInt64
+		var em, sn, fn, da, ct sql.NullString
+		err := s.db.QueryRowContext(r.Context(), query, orderID).Scan(&em, &sn, &fn, &qVal, &aVal, &da, &ct)
 		if err != nil {
-			log.Printf("update order status error: %v", err)
+			log.Printf("store: notice - querying order details for %s returned: %v", orderID, err)
+		} else {
+			email = strings.TrimSpace(em.String)
+			shippingName = strings.TrimSpace(sn.String)
+			finishName = strings.TrimSpace(fn.String)
+			deliveryAddress = strings.TrimSpace(da.String)
+			city = strings.TrimSpace(ct.String)
+			if qVal.Valid {
+				quantity = int(qVal.Int64)
+			}
+			if aVal.Valid {
+				amount = int(aVal.Int64)
+			}
+		}
+
+		// Update order status in DB
+		updateQuery := `
+		UPDATE orders 
+		SET status = $1 
+		WHERE id = $2 
+		   OR LOWER(id) = LOWER($2) 
+		   OR id LIKE ('%' || $2) 
+		   OR id = ('ord-' || $2) 
+		   OR id = REPLACE($2, 'ord-', '')
+		`
+		res, err := s.db.ExecContext(r.Context(), updateQuery, req.Status, orderID)
+		if err != nil {
+			log.Printf("store: update order status error for %s: %v", orderID, err)
+		} else {
+			rowsAffected, _ := res.RowsAffected()
+			log.Printf("store: updated order %s status to '%s' (rows affected: %d, recipient email: '%s')", orderID, req.Status, rowsAffected, email)
 		}
 	}
 
 	s.mu.Lock()
 	for i, o := range s.memoryOrders {
-		if fmt.Sprintf("%v", o["id"]) == orderID {
+		oid := fmt.Sprintf("%v", o["id"])
+		if oid == orderID || strings.HasSuffix(oid, orderID) || strings.EqualFold(oid, orderID) {
 			s.memoryOrders[i]["status"] = req.Status
 			s.memoryOrders[i]["fulfillment_status"] = req.Status
 			if email == "" {
@@ -488,9 +557,18 @@ func (s *Service) HandleUpdateOrderStatus(w http.ResponseWriter, r *http.Request
 	}
 	s.mu.Unlock()
 
-	// If admin updated status to "shipped", dispatch Order Shipped confirmation email via Resend
-	if strings.EqualFold(req.Status, "shipped") && email != "" {
-		go SendOrderShippedEmail(email, shippingName, orderID, finishName, quantity, amount, deliveryAddress, city, req.TrackingNumber)
+	// Detect if status represents "shipped"
+	isShipped := strings.EqualFold(req.Status, "shipped") ||
+		strings.Contains(strings.ToLower(req.Status), "ship") ||
+		strings.Contains(strings.ToLower(req.Status), "dispatch")
+
+	if isShipped {
+		if email != "" {
+			log.Printf("store: dispatching SendOrderShippedEmail to '%s' for order '%s'", email, orderID)
+			go SendOrderShippedEmail(email, shippingName, orderID, finishName, quantity, amount, deliveryAddress, city, req.TrackingNumber)
+		} else {
+			log.Printf("store: WARNING - order %s was marked as shipped, but no customer email address was found in DB or memory.", orderID)
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{

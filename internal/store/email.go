@@ -155,10 +155,22 @@ func SendOrderShippedEmail(toEmail, shippingName, orderID, finishName string, qu
 		templateID = strings.TrimSpace(os.Getenv("RESEND_CARD_SHIPPED_TEMPLATE_ID"))
 	}
 	if templateID == "" {
+		templateID = strings.TrimSpace(os.Getenv("RESEND_SHIPPING_TEMPLATE_ID"))
+	}
+	if templateID == "" {
+		templateID = strings.TrimSpace(os.Getenv("RESEND_SHIP_TEMPLATE_ID"))
+	}
+	if templateID == "" {
+		templateID = strings.TrimSpace(os.Getenv("RESEND_ORDER_SHIPPING_TEMPLATE_ID"))
+	}
+	if templateID == "" {
 		templateID = strings.TrimSpace(os.Getenv("ORDER_SHIPPED_TEMPLATE_ID"))
 	}
 	if templateID == "" {
 		templateID = strings.TrimSpace(os.Getenv("SHIPPED_TEMPLATE_ID"))
+	}
+	if templateID == "" {
+		templateID = strings.TrimSpace(os.Getenv("SHIP_TEMPLATE_ID"))
 	}
 
 	var payload map[string]interface{}
