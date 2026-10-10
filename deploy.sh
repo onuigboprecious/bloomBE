@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
+# Ensure Go is in PATH if not already available
+if ! command -v go &> /dev/null; then
+    export PATH="$PATH:/usr/local/go/bin"
+fi
+
 # Terminal colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'

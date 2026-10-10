@@ -13,6 +13,7 @@ import (
 	sentryhttp "github.com/getsentry/sentry-go/http"
 	_ "github.com/lib/pq"
 
+	"github.com/onuigboprecious/infarbloom/backend/internal/account"
 	"github.com/onuigboprecious/infarbloom/backend/internal/analytics"
 	"github.com/onuigboprecious/infarbloom/backend/internal/auth"
 	"github.com/onuigboprecious/infarbloom/backend/internal/cards"
@@ -117,6 +118,7 @@ func main() {
 	analyticsSvc := analytics.New(database)
 	storeSvc := store.New(database)
 	r2Svc := storage.NewR2ServiceFromEnv()
+	accountSvc := account.NewService(database)
 
 	mux := http.NewServeMux()
 
@@ -148,6 +150,17 @@ func main() {
 	mux.HandleFunc("GET /api/auth/me", authSvc.HandleMe)
 	mux.HandleFunc("POST /api/auth/forgot-password", middleware.AuthRateLimit(authSvc.HandleForgotPassword))
 	mux.HandleFunc("POST /api/auth/reset-password", middleware.AuthRateLimit(authSvc.HandleResetPassword))
+	mux.HandleFunc("POST /api/auth/change-password", authSvc.HandleChangePassword)
+	mux.HandleFunc("POST /api/auth/logout-all", authSvc.HandleLogoutAll)
+	mux.HandleFunc("GET /api/auth/sessions", authSvc.HandleGetSessions)
+	mux.HandleFunc("DELETE /api/auth/sessions/{id}", authSvc.HandleRevokeSession)
+	mux.HandleFunc("DELETE /api/auth/sessions/", authSvc.HandleRevokeSession)
+	mux.HandleFunc("DELETE /api/account", authSvc.HandleDeleteAccount)
+
+	// Account & Notification Settings
+	mux.HandleFunc("GET /api/account/settings", accountSvc.HandleGetSettings)
+	mux.HandleFunc("PUT /api/account/settings", accountSvc.HandleUpdateSettings)
+	mux.HandleFunc("POST /api/account/settings", accountSvc.HandleUpdateSettings)
 
 	// Google OAuth & ID Token Endpoints
 	mux.HandleFunc("POST /api/auth/google", middleware.AuthRateLimit(authSvc.HandleGoogleAuth))
