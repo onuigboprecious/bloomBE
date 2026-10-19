@@ -122,21 +122,15 @@ func (s *Service) HandleInitializePaystack(w http.ResponseWriter, r *http.Reques
 		req.Quantity = 1
 	}
 
-	// Server-side authoritative price calculation (prevents client price tampering)
-	unitPrice := 40000
+	// Server-side authoritative annual subscription price calculation
+	unitPrice := 19000 // Pro Smart Card Annual Plan (all finishes)
 	idLower := strings.ToLower(req.FinishID)
 	nameLower := strings.ToLower(req.FinishName)
 
 	if strings.Contains(idLower, "wristband") || strings.Contains(nameLower, "wristband") {
-		unitPrice = 28000
-	} else if strings.Contains(idLower, "steel") || strings.Contains(nameLower, "steel") {
-		unitPrice = 65000
-	} else if strings.Contains(idLower, "rose") || strings.Contains(nameLower, "rose") {
-		unitPrice = 55000
-	} else if strings.Contains(idLower, "bamboo") || strings.Contains(nameLower, "bamboo") {
-		unitPrice = 40000
-	} else if strings.Contains(idLower, "matte") || strings.Contains(nameLower, "matte") {
-		unitPrice = 35000
+		unitPrice = 16000 // Active Wristband Annual Plan
+	} else {
+		unitPrice = 19000 // Pro Smart Card Annual Plan
 	}
 
 	shippingFee := 5000
