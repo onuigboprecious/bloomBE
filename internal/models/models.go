@@ -189,3 +189,36 @@ type OrderRequest struct {
 	City            string `json:"city,omitempty"`
 	PaymentRef      string `json:"paymentRef,omitempty"`
 }
+
+// Subscription represents an annual user subscription
+type Subscription struct {
+	ID               string    `json:"id"`
+	UserID           string    `json:"userId"`
+	PlanID           string    `json:"planId"`
+	PlanName         string    `json:"planName"`
+	BillingCycle     string    `json:"billingCycle"` // "annual"
+	Amount           int       `json:"amount"`       // e.g. 19000
+	Currency         string    `json:"currency"`     // "NGN"
+	Status           string    `json:"status"`       // "active", "canceled", "expired"
+	StartsAt         time.Time `json:"startsAt"`
+	ExpiresAt        time.Time `json:"expiresAt"`
+	DaysRemaining    int       `json:"daysRemaining"`
+	PaymentReference string    `json:"paymentReference,omitempty"`
+	PaymentChannel   string    `json:"paymentChannel,omitempty"`
+	AutoRenew        bool      `json:"autoRenew"`
+	Features         []string  `json:"features"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+}
+
+// SubscriptionPlan represents a selectable billing tier
+type SubscriptionPlan struct {
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	Price        int      `json:"price"`
+	Currency     string   `json:"currency"`
+	BillingCycle string   `json:"billingCycle"`
+	Description  string   `json:"description"`
+	Popular      bool     `json:"popular"`
+	Features     []string `json:"features"`
+}

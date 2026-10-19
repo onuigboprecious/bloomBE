@@ -474,6 +474,40 @@ func (s *Service) ClaimCard(ctx context.Context, userID, cardUid string) (*NFCCa
 	return &res, nil
 }
 
+
+// UnlinkCard unlinks/deactivates a claimed NFC card from the user account
+func (s *Service) UnlinkCard(ctx context.Context, userID, cardUid string) error {
+	cardUid = strings.TrimSpace(cardUid)
+
+	if s.db != nil {
+		if cardUid != "" {
+			_, err := s.db.ExecContext(ctx, `UPDATE nfc_cards SET user_id = NULL, status = 'provisioned' WHERE LOWER(card_uid) = LOWER() AND user_id = `, cardUid, userID)
+			if err != nil {
+				return err
+			}
+			_, _ = s.db.ExecContext(ctx, `UPDATE profiles SET card_uid = NULL WHERE user_id =  AND LOWER(card_uid) = LOWER()`, userID, cardUid)
+		} else {
+			_, err := s.db.ExecContext(ctx, `UPDATE nfc_cards SET user_id = NULL, status = 'provisioned' WHERE user_id = `, userID)
+			if err != nil {
+				return err
+			}
+			_, _ = s.db.ExecContext(ctx, `UPDATE profiles SET card_uid = NULL WHERE user_id = `, userID)
+		}
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, c := range s.cards {
+		if (cardUid == "" || strings.EqualFold(c.CardUid, cardUid)) && c.UserID != nil && *c.UserID == userID {
+			c.UserID = nil
+			c.Status = "provisioned"
+		}
+	}
+	return nil
+}
+
 // GetCardStatus retrieves card details by cardUid
 func (s *Service) GetCardStatus(ctx context.Context, cardUid string) (*NFCCard, error) {
 	cardUid = strings.TrimSpace(cardUid)
@@ -810,4 +844,38 @@ func (h *Handler) HandleGetMyCards(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, list)
+}
+
+// HandleUnlinkCard handles POST /api/cards/unlink
+func (h *Handler) HandleUnlinkCard(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	user, ok := auth.CurrentUserFromContext(r)
+	if !ok || user == nil {
+		writeError(w, http.StatusUnauthorized, "authentication required")
+		return
+	}
+
+	var req struct {
+		CardUid string `json:"cardUid"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	if err := h.svc.UnlinkCard(r.Context(), user.ID, req.CardUid); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "success",
+		"message": "Card successfully unlinked and deactivated from account",
+	})
+}
+
+// HandleDeactivateCard handles POST /api/cards/deactivate
+func (h *Handler) HandleDeactivateCard(w http.ResponseWriter, r *http.Request) {
+	h.HandleUnlinkCard(w, r)
 }

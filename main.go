@@ -16,6 +16,7 @@ import (
 	"github.com/onuigboprecious/infarbloom/backend/internal/account"
 	"github.com/onuigboprecious/infarbloom/backend/internal/analytics"
 	"github.com/onuigboprecious/infarbloom/backend/internal/auth"
+	"github.com/onuigboprecious/infarbloom/backend/internal/billing"
 	"github.com/onuigboprecious/infarbloom/backend/internal/cards"
 	"github.com/onuigboprecious/infarbloom/backend/internal/db"
 	"github.com/onuigboprecious/infarbloom/backend/internal/leads"
@@ -119,6 +120,8 @@ func main() {
 	storeSvc := store.New(database)
 	r2Svc := storage.NewR2ServiceFromEnv()
 	accountSvc := account.NewService(database)
+	billingSvc := billing.NewService(database)
+	billingHandler := billing.NewHandler(billingSvc, authSvc)
 
 	mux := http.NewServeMux()
 
@@ -199,6 +202,9 @@ func main() {
 	mux.HandleFunc("POST /api/cards/claim", cardsHandler.HandleClaimCard)
 	mux.HandleFunc("POST /api/cards/activate", cardsHandler.HandleActivateCard)
 	mux.HandleFunc("GET /api/cards/me", cardsHandler.HandleGetMyCards)
+	mux.HandleFunc("POST /api/cards/unlink", cardsHandler.HandleUnlinkCard)
+	mux.HandleFunc("POST /api/cards/deactivate", cardsHandler.HandleDeactivateCard)
+	mux.HandleFunc("DELETE /api/cards/unlink", cardsHandler.HandleUnlinkCard)
 
 	// Admin Tag CRUD Endpoints
 	mux.HandleFunc("POST /api/admin/cards", cardsHandler.HandleCreateCard)
@@ -221,7 +227,16 @@ func main() {
 	mux.HandleFunc("POST /api/analytics/tap", analyticsSvc.HandleRecordTap)
 	mux.HandleFunc("GET /api/analytics", analyticsSvc.HandleGetAnalytics)
 
-	// 8. Support Tickets, Orders & Paystack Payment Stack
+	// 8. Billing & Annual Subscriptions
+	mux.HandleFunc("GET /api/billing/plans", billingHandler.HandleGetPlans)
+	mux.HandleFunc("GET /api/billing/subscription", billingHandler.HandleGetSubscription)
+	mux.HandleFunc("POST /api/billing/subscribe", billingHandler.HandleSubscribe)
+	mux.HandleFunc("GET /api/billing/verify/{reference}", billingHandler.HandleVerifySubscription)
+	mux.HandleFunc("GET /api/billing/verify", billingHandler.HandleVerifySubscription)
+	mux.HandleFunc("POST /api/billing/verify", billingHandler.HandleVerifySubscription)
+	mux.HandleFunc("POST /api/billing/cancel", billingHandler.HandleCancelSubscription)
+
+	// 9. Support Tickets, Orders & Paystack Payment Stack
 	mux.HandleFunc("POST /api/support", middleware.TurnstileProtection(storeSvc.HandleSupportTicket))
 	mux.HandleFunc("POST /api/contact", middleware.TurnstileProtection(storeSvc.HandleSupportTicket))
 	mux.HandleFunc("POST /api/orders", storeSvc.HandleOrders)

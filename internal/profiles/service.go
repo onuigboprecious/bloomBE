@@ -61,7 +61,7 @@ func (s *Service) seedDefaultProfiles() {
 		Location: "",
 		Theme:    "dark-luxe",
 		Layout:   "stack",
-		CardUid:  "ENZ-9921-NFC",
+		CardUid:  "",
 		Socials:  map[string]interface{}{},
 		Stats: models.ProfileStats{
 			TotalTaps:      0,
@@ -73,9 +73,7 @@ func (s *Service) seedDefaultProfiles() {
 
 	s.profiles["user"] = defaultProfile
 	s.profiles["precious"] = defaultProfile
-	s.cardToUser["ENZ-9921-NFC"] = "user"
-	s.userToCard["user"] = "ENZ-9921-NFC"
-	s.userToCard["precious"] = "ENZ-9921-NFC"
+// Default profiles do not have pre-linked cards until claimed
 }
 
 // GetByUsername fetches public Bloom profile by @username or card_uid.
@@ -127,6 +125,14 @@ func (s *Service) GetByUsername(ctx context.Context, identifier string) (*models
 				return s.getFallbackProfile(identifier)
 			}
 			return nil, err
+		}
+
+		if p.CardUid == "" && userID != "" {
+			var nfcUid sql.NullString
+			_ = s.db.QueryRowContext(ctx, `SELECT card_uid FROM nfc_cards WHERE user_id =  AND status = 'claimed' ORDER BY created_at DESC LIMIT 1`, userID).Scan(&nfcUid)
+			if nfcUid.Valid && nfcUid.String != "" {
+				p.CardUid = nfcUid.String
+			}
 		}
 
 		if usernameChangedAt.Valid && !usernameChangedAt.Time.IsZero() {
