@@ -244,6 +244,9 @@ func main() {
 	mux.HandleFunc("GET /api/admin/orders", storeSvc.HandleListOrders)
 	mux.HandleFunc("PATCH /api/admin/orders/{id}/status", storeSvc.HandleUpdateOrderStatus)
 	mux.HandleFunc("PUT /api/admin/orders/{id}/status", storeSvc.HandleUpdateOrderStatus)
+	mux.HandleFunc("GET /api/admin/subscriptions", billingHandler.HandleAdminListSubscribers)
+	mux.HandleFunc("GET /api/admin/subscribers", billingHandler.HandleAdminListSubscribers)
+
 	mux.HandleFunc("POST /api/paystack/initialize", storeSvc.HandleInitializePaystack)
 	mux.HandleFunc("GET /api/paystack/verify/{reference}", storeSvc.HandleVerifyPaystack)
 	mux.HandleFunc("GET /api/paystack/verify", storeSvc.HandleVerifyPaystack)

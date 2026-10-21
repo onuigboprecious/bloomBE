@@ -222,3 +222,38 @@ type SubscriptionPlan struct {
 	Popular      bool     `json:"popular"`
 	Features     []string `json:"features"`
 }
+
+// AdminSubscriber represents a subscriber detail record for the admin operations dashboard
+type AdminSubscriber struct {
+	ID               string    `json:"id"`
+	UserID           string    `json:"userId"`
+	UserName         string    `json:"userName"`
+	UserEmail        string    `json:"userEmail"`
+	UserUsername     string    `json:"userUsername"`
+	UserPhone        string    `json:"userPhone"`
+	UserAvatar       string    `json:"userAvatar"`
+	PlanID           string    `json:"planId"`
+	PlanName         string    `json:"planName"`
+	BillingCycle     string    `json:"billingCycle"`
+	Amount           int       `json:"amount"`
+	Currency         string    `json:"currency"`
+	Status           string    `json:"status"` // "active", "expired", "canceled"
+	StartsAt         time.Time `json:"startsAt"`
+	ExpiresAt        time.Time `json:"expiresAt"`
+	DaysRemaining    int       `json:"daysRemaining"`
+	PaymentReference string    `json:"paymentReference"`
+	PaymentChannel   string    `json:"paymentChannel"`
+	AutoRenew        bool      `json:"autoRenew"`
+	CardUID          string    `json:"cardUid,omitempty"`
+	CreatedAt        time.Time `json:"createdAt"`
+}
+
+// AdminSubscribersStats contains high-level metrics for active subscribers
+type AdminSubscribersStats struct {
+	Total                  int `json:"total"`
+	Active                 int `json:"active"`
+	Expired                int `json:"expired"`
+	ExpiringSoon           int `json:"expiringSoon"`
+	AnnualRecurringRevenue int `json:"annualRecurringRevenue"` // in NGN
+}
+
