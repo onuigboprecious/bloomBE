@@ -176,6 +176,9 @@ func (s *Service) HandleGetSessions(w http.ResponseWriter, r *http.Request) {
 					})
 				}
 			}
+			if err := rows.Err(); err != nil {
+				// Log or gracefully continue with sessions collected so far
+			}
 		}
 	}
 
