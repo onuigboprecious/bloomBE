@@ -1,0 +1,55 @@
+name: Build, Test & Deploy to InterServer VPS
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Run Tests & Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          cache: true
+
+      - name: Download Go Dependencies
+        run: go mod download
+
+      - name: Run Go Unit Tests
+        run: go test -v ./...
+
+      - name: Verify Binary Compilation
+        run: go build -v -o /dev/null main.go
+
+  deploy:
+    name: Deploy to InterServer VPS
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH & Deploy via Docker Compose
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          script_stop: true
+          script: |
+            echo "==> Deploying latest changes on VPS..."
+            cd /home/precious/apps/bloomBE
+            git pull origin main
+            docker compose -f docker-compose.prod.yml up -d --build backend
+            docker compose -f docker-compose.prod.yml ps
+            echo "==> Deployment completed successfully!"
